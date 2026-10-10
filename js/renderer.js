@@ -24,7 +24,7 @@ const COLORS = {
   'R': '#b8b2a4',                       // railing (floor drawn first, bars on top)
   'S': '#d3d1c7',                       // stairs
   '1': '#8f8f8b', '2': '#8f8f8b', '3': '#8f8f8b', '4': '#8f8f8b', '5': '#8f8f8b', '6': '#8f8f8b', '7': '#8f8f8b', '8': '#8f8f8b', 'q': '#a6a49c', 'm': '#8f8f8b',   // amphitheatre tiers (and 'm' = their flat base slab): stone floor under them, slabs drawn by drawTier
-  'L': '#7d8aa0',                       // lift
+  'L': '#b9573a', 'l': '#cfd2d6', 'f': '#e4e6e9', 'd': '#e4e6e9', 'A': '#cfd2d6',   // elevator wall (drawn by drawLiftWall)
   'D': '#9c6428',                       // store room door
   'E': '#030305', 'F': '#030305',       // escalators: painted over by drawWell() (escalator.js) - black here just in case
   'c': '#8f8f8b',                       // pillar: stone floor under it, drawn by drawPillar
@@ -604,9 +604,10 @@ function drawTile(ch, px, py, tx, ty, time) {
   } else if (ch === 'S') {                            // stairs: horizontal steps
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     for (let i = 0; i < 4; i++) ctx.fillRect(px, py + i * 8 + 6, TILE, 2);
-  } else if (ch === 'L') {                            // lift: two sliding door panels
-    ctx.fillStyle = '#4d586b'; ctx.fillRect(px + 15, py + 4, 2, TILE - 4);
-    ctx.fillStyle = '#aab6c9'; ctx.fillRect(px + 3, py + 8, 10, 3);
+  } else if (ch === 'L') {                            // brick pillar beside the lifts (2 tiles wide, sticks out from the west wall)
+    drawLiftPillar(px, py, tx, ty);
+  } else if (ch === 'l' || ch === 'A' || ch === 'f' || ch === 'd') {   // elevator wall (west wall of zone 1)
+    drawLiftWall(ch, px, py, tx, ty);
   } else if (ch === 'D') {                            // door with a knob
     ctx.fillStyle = '#6e4519'; ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 2);
     ctx.fillStyle = '#e0b04a'; ctx.fillRect(px + 22, py + 16, 4, 4);
@@ -647,6 +648,65 @@ function drawGymWall(ch, px, py, tx, ty) {
     ctx.fillStyle = '#9a7e58'; ctx.fillRect(4, 19, 24, 2); ctx.fillRect(15, 21, 2, 9);
   }
   ctx.restore();
+}
+
+// ---- elevator wall (zone 1, west wall, rows 12-18) ---------------------------------------------------------------
+// Copied from the real lobby photo. Seen from the lobby, left -> right is SOUTH -> NORTH on the map:
+//   L brick pillar (x0-2, rows 12 and 18) | f white wall strip (rows 13, 17) | l lift 03 | A steel panel with the "13 LEVEL" sign + call button | l lift 04
+// Like the gym, each tile is drawn as a normal front view (x along the wall, y = from the wall out to the floor) and turned a quarter turn.
+function drawLiftWall(ch, px, py, tx, ty) {
+  ctx.save();
+  ctx.beginPath(); ctx.rect(px, py, TILE, TILE); ctx.clip();
+  ctx.translate(px + TILE / 2, py + TILE / 2); ctx.rotate(-Math.PI / 2); ctx.translate(-TILE / 2, -TILE / 2);
+  const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+  if (ch === 'f' || ch === 'd') {                                                                // plain white wall strip between a pillar and a lift
+    R(0, 0, TILE, TILE, '#e4e6e9'); R(0, 0, TILE, 5, '#f2f3f5'); R(0, 27, TILE, 5, '#d2d5d9'); R(0, 27, TILE, 1, '#c3c6cb');
+    if (ch === 'd') {                                                              // dark slatted 'All Floor Directory' board with a pale title block
+      R(5, 7, 22, 21, '#1b2a44'); R(5, 7, 22, 4, '#dfe4ea'); R(7, 8, 10, 1, '#7d8aa0'); R(7, 9, 7, 1, '#9aa5b5');
+      for (let i = 0; i < 6; i++) { R(6, 13 + i * 2, 20, 1, 'rgba(255,255,255,0.10)'); R(8, 13 + i * 2, 5 + (i * 5) % 11, 1, '#8aa0c0'); }
+      R(5, 7, 22, 1, '#9aa0a6'); R(5, 27, 22, 1, '#9aa0a6'); R(5, 7, 1, 21, '#9aa0a6'); R(26, 7, 1, 21, '#9aa0a6');
+    }
+  } else if (ch === 'A') {                                                         // steel panel between the lifts
+    R(0, 0, TILE, TILE, '#cfd2d6'); R(0, 0, TILE, 5, '#e6e8ea');
+    R(0, 5, TILE, 27, '#b3b9bf');
+    for (let i = 2; i < TILE; i += 4) R(i, 5, 1, 27, 'rgba(255,255,255,0.18)');
+    R(0, 5, 2, 27, '#d9dde1'); R(TILE - 2, 5, 2, 27, '#d9dde1');
+    R(10, 8, 12, 11, '#1b66c4'); R(10, 8, 12, 1, '#4a93ee');                      // blue "13 LEVEL" sign
+    ctx.font = 'bold 9px monospace'; ctx.fillStyle = '#fff'; ctx.fillText('13', 11, 16);
+    R(12, 18, 8, 1, '#9fc4f2');
+    R(13, 21, 6, 8, '#7e848b'); R(14, 22, 4, 1, '#c8ccd0'); R(15, 25, 2, 3, '#e8eaed');   // call button plate
+  } else {                                                                         // 'l': one lift (one tile wide)
+    const num = ty <= 14 ? '04' : '03';
+    ctx.scale(0.5, 1);                                                             // the 64-wide lift design squeezed into one tile
+    R(0, 0, 64, 32, '#cfd2d6'); R(0, 0, 64, 5, '#e6e8ea');                         // pale wall + white lintel
+    R(8, 2, 48, 4, '#1f6fd0'); R(8, 2, 48, 1, '#4a93ee');                         // blue "ELEVATOR 0x : floors" strip
+    for (let i = 0; i < 8; i++) R(10 + i * 4, 4, 2, 1, '#dce9fb');
+    ctx.font = 'bold 5px monospace'; ctx.fillStyle = '#fff'; ctx.fillText(num, 46, 6);
+    R(26, 8, 12, 4, '#101418'); R(30, 9, 4, 2, '#d23a2e');                        // floor-number display
+    R(4, 11, 56, 21, '#9aa0a6');                                                   // steel frame
+    R(7, 13, 25, 19, '#b7bdc3'); R(32, 13, 25, 19, '#c3c9cf');                    // two sliding doors
+    for (let i = 8; i < 56; i += 3) R(i, 13, 1, 19, i % 2 ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.06)');
+    R(11, 13, 5, 19, 'rgba(255,255,255,0.38)'); R(39, 13, 7, 19, 'rgba(255,255,255,0.42)');   // glossy reflections
+    R(31, 13, 2, 19, '#5c626a'); R(4, 11, 3, 21, '#d9dde1'); R(57, 11, 3, 21, '#d9dde1');
+    R(5, 28, 54, 1, '#2a2d31'); R(5, 29, 54, 3, '#d8dde2');                        // dark gap + steel sill
+  }
+  ctx.restore();
+}
+
+// Brick pillar (L, 2 tiles wide, rows 13 and 17): rust-red tile blocks sticking out from the west wall; the north one carries the blue notice board.
+function drawLiftPillar(px, py, tx, ty) {
+  const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(px + x, py + y, w, h); };
+  R(0, 0, TILE, TILE, '#b9573a');
+  for (let cx = 0; cx < 4; cx++) for (let cy = 0; cy < 3; cy++) {
+    const v = (cx * 3 + cy * 5 + tx) % 4;
+    if (v === 0) R(cx * 8 + 1, cy * 8 + 1, 7, 7, 'rgba(0,0,0,0.07)'); else if (v === 1) R(cx * 8 + 1, cy * 8 + 1, 7, 7, 'rgba(255,255,255,0.06)');
+  }
+  for (let i = 0; i < TILE; i += 8) { R(i, 0, 1, TILE - 6, '#dcab95'); if (i < TILE - 6) R(0, i, TILE, 1, '#dcab95'); }
+  R(0, 0, TILE, 2, '#d98466');                                                    // lit top edge
+  R(0, TILE - 6, TILE, 6, '#8f3f29'); R(0, TILE - 6, TILE, 1, '#a94c34');         // front face of the block (like the wall base)
+  if (tx === 2 && ty === 12) {                                                    // notice board on the end of the north pillar
+    R(22, 6, 8, 16, '#3bb4e0'); R(23, 8, 6, 6, '#e9f6fb'); R(23, 16, 6, 1, '#d4eef8'); R(23, 18, 4, 1, '#d4eef8');
+  }
 }
 
 function drawArrow(glyph, px, py) {                   // exit marker on a path tile

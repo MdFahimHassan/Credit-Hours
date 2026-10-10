@@ -7,7 +7,8 @@
 //   c  steel-blue pillar on a concrete plinth (solid) - zone 1: two rows (9 and 21), 6 tiles above / below the escalator
 //   p  old "path" tile (walkable). Zone 1 no longer uses it; in other zones it now just looks like the stone floor
 //   X  exit path           U  "up" path            S  stairs            D  store room door (solid)
-//   L  lift (solid)        E/F escalators (solid, animated)             v  escalator well (solid)
+//   L  brick pillar beside the lifts (solid, zone 1: x0-2 on rows 12 and 18, one tile beyond the white wall strips)   f  white wall strip beside the lifts (rows 13 and 17)   d  same strip with the 'All Floor Directory' board (row 13)   l  lift door   A  steel panel with the '13 LEVEL' sign (both solid)
+//   E/F escalators (solid, animated)             v  escalator well (solid)
 //   W  raised glass skylight (solid, see-through to the floor below)
 //   1-6    amphitheatre sitting tiers (solid), 1 = lowest step, 6 = highest - zone 1 upper section; corners are rounded where a block sticks out
 //   q      semi-wall (solid): low board-formed concrete planter wall around the zone 1 hedge beds
@@ -77,13 +78,13 @@ export const ZONES = {
     "#..c...c...c...c...c.WWWWWW.cYZHZHYHH#",
     "#....................WWWWWW..YHHHYHYH#",
     "X....................WWWWWW..HHZHHHZH#",
-    "#........ao..........WWWWWW..HHHHHYHY#",
-    "#LL......RRRRRRRRR...WWWWWW..ZYHZHHHH#",
-    "#.........PEEEEEvvR..WWWWWW..YHYHHZHY#",
-    "#.....N..RRvvvvvvvR..WWWWWW..HHHHYHYH#",
-    "#..........FFFFFvvR..WWWWWW..ZYHHHHHH#",
-    "#LL......RRRRRRRRR...WWWWWW..HHZHHHHH#",
-    "#....................WWWWWW..HHYYHHYH#",
+    "LLL......ao..........WWWWWW..HHHHHYHY#",
+    "d........RRRRRRRRR...WWWWWW..ZYHZHHHH#",
+    "l.........PEEEEEvvR..WWWWWW..YHYHHZHY#",
+    "A.....N..RRvvvvvvvR..WWWWWW..HHHHYHYH#",
+    "l..........FFFFFvvR..WWWWWW..ZYHHHHHH#",
+    "f........RRRRRRRRR...WWWWWW..HHZHHHHH#",
+    "LLL..................WWWWWW..HHYYHHYH#",
     "X....................WWWWWW..ZYYYHYZH#",
     "#....................WWWWWW..HYHHHHHY#",
     "#..c...c...c...c...c........cHHHYYHYH#",
