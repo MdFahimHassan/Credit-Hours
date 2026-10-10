@@ -21,6 +21,7 @@ const HAZE_FAR = 0.58;      // haze strength when you are far from the rail (0-1
 const HAZE_NEAR = 0.10;     // haze strength when touching the rail
 
 import { TILE, getTile, getExit, zoneId, cols, rows, widthPx, heightPx } from './map.js';
+import { vineStrands, drawVines, drawVineLip } from './foliage.js';
 
 const SIDES = ['n', 'e', 's', 'w'];
 const FACE = { n: 'up', e: 'right', s: 'down', w: 'left' };
@@ -649,6 +650,9 @@ function drawSide(g, side, time) {
   hg.addColorStop(0, rgba(cfg.haze, a * 0.3)); hg.addColorStop(1, rgba(cfg.haze, a));
   g.fillStyle = hg; g.fillRect(-EXT, 0, span, EXT);
   g.restore();
+
+  const vines = vineStrands(zoneId, side);                     // hedge vines hanging over the edge (foliage.js VINE_EDGES): in front of the haze
+  if (vines.length) { drawVines(g, vines, time); drawVineLip(g, vines); }
 
   for (const w of P.runs) {                                    // concrete piers where the window meets the wall
     for (const [x, lit] of [[w.u0, true], [w.u1 - 9, false]]) {

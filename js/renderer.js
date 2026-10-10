@@ -9,6 +9,7 @@ import { drawCharacter } from './sprites.js';
 import { drawGlassFront, drawGlassTops } from './glass.js';
 import { skyline, drawSkyline } from './skyline.js';
 import { getFloor } from './floor.js';
+import { paintHedge, hedgeBase, buildOverlay } from './foliage.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -71,7 +72,7 @@ function drawPlanted(ch, px, py, tx, ty) {
   ctx.save();
   ctx.beginPath(); ctx.rect(px, py, TILE, TILE); ctx.clip();       // leaves never spill onto neighbour tiles
   if (ch === 'Y') {                                                // bush mounds: rounder and lighter than the hedge
-    ctx.fillStyle = '#24652b'; ctx.fillRect(px, py, TILE, TILE);
+    ctx.fillStyle = hedgeBase(px, py); ctx.fillRect(px, py, TILE, TILE);          // same base tone as the hedge tiles around it
     const shades = ['#2f8a37', '#3a9a42', '#43a047', '#2c7d33'];
     [[9, 10], [22, 9], [11, 23], [24, 22], [16, 16]].forEach(([sx, sy], i) => {
       const cx = px + sx + (rnd(tx, ty, i) - 0.5) * 4, cy = py + sy + (rnd(tx, ty, i + 9) - 0.5) * 4;
@@ -80,29 +81,15 @@ function drawPlanted(ch, px, py, tx, ty) {
       ctx.fillStyle = '#8bd18f'; ctx.fillRect(Math.round(cx - 3), Math.round(cy - 4), 3, 2);
     });
   } else if (ch === 'Z') {                                         // tree: one big canopy
-    ctx.fillStyle = '#1f5a28'; ctx.fillRect(px, py, TILE, TILE);
+    ctx.fillStyle = hedgeBase(px, py); ctx.fillRect(px, py, TILE, TILE);
     ctx.fillStyle = 'rgba(0,0,0,0.30)'; disc(px + 17, py + 19, 14.5);
     ctx.fillStyle = '#2e7d32'; disc(px + 16, py + 15, 14.5);
     ctx.fillStyle = '#388e3c'; disc(px + 12, py + 12, 9); disc(px + 21, py + 17, 8);
     ctx.fillStyle = '#4caf50'; disc(px + 11, py + 9, 5);
     ctx.fillStyle = '#8bd18f';
     ctx.fillRect(px + 9, py + 7, 3, 2); ctx.fillRect(px + 20, py + 13, 3, 2); ctx.fillRect(px + 14, py + 20, 3, 2);
-  } else {                                                         // clipped hedge: dense wall of leaves
-    const shades = ['#2e7d32', '#388e3c', '#2a7030', '#43a047'];
-    for (let i = 0; i < 9; i++) {                                  // 3x3 grid of overlapping leaf blobs
-      const gx = i % 3, gy = Math.floor(i / 3);
-      const h = Math.abs(Math.sin((tx * 3 + gx) * 12.9898 + (ty * 3 + gy) * 78.233) * 43758.5453) % 1;
-      ctx.fillStyle = shades[Math.floor(h * shades.length)];
-      ctx.beginPath(); ctx.arc(px + gx * 11 + 5 + (h - 0.5) * 4, py + gy * 11 + 5 + (h * 7 % 1 - 0.5) * 4, 8, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.fillStyle = '#7bc47f';                                     // a few bright leaf highlights
-    for (let i = 0; i < 4; i++) {
-      const h = Math.abs(Math.sin((tx * 5 + i) * 39.346 + (ty * 7 + i) * 11.135) * 43758.5453) % 1;
-      const h2 = Math.abs(Math.sin((tx * 5 + i) * 17.17 + (ty * 7 + i) * 91.7) * 12345.678) % 1;
-      ctx.fillRect(px + 3 + Math.floor(h * 24), py + 3 + Math.floor(h2 * 22), 3, 2);
-    }
-    ctx.fillStyle = '#143d1a';                                     // deep gaps between the leaves
-    ctx.fillRect(px + 7, py + 14, 3, 2); ctx.fillRect(px + 20, py + 8, 3, 2); ctx.fillRect(px + 14, py + 24, 3, 2);
+  } else {                                                         // hedge: sparse planter bed <-> dense ivy, decided by a noise field (see foliage.js)
+    paintHedge(ctx, px, py, tx, ty);
   }
   // light top edge / dark base only where the planted area ENDS, so a block of tiles reads as one big mass
   if (ty > 0 && !isPlanted(tx, ty - 1)) { ctx.fillStyle = 'rgba(190,240,170,0.28)'; ctx.fillRect(px, py, TILE, 4); }   // (none at the map's top edge: the hedge carries on)
@@ -114,18 +101,18 @@ function drawPlanted(ch, px, py, tx, ty) {
 // Pale grey safety rail for planted areas (NOT the dark two-bar roof railing): a slim handrail on top,
 // thin vertical balusters under it, and a post at each end of every tile. Drawn on every open face.
 const RAIL = { hand: '#d6dadd', bal: '#98a0a5', post: '#eceff1', shadow: 'rgba(0,0,0,0.28)' };
-function railH(x, y) {                                    // horizontal rail segment (top / bottom faces)
-  ctx.fillStyle = RAIL.shadow; ctx.fillRect(x, y + 6, TILE, 1);
-  ctx.fillStyle = RAIL.bal; for (let i = 3; i < TILE - 2; i += 4) ctx.fillRect(x + i, y + 3, 1, 4);
-  ctx.fillStyle = RAIL.hand; ctx.fillRect(x, y + 1, TILE, 2);
-  ctx.fillStyle = RAIL.post; ctx.fillRect(x, y, 2, 7); ctx.fillRect(x + TILE - 2, y, 2, 7);
+function railH(x, y, g = ctx, sh = true) {                // horizontal rail segment (top / bottom faces); g = target, sh = draw the soft shadow line
+  if (sh) { g.fillStyle = RAIL.shadow; g.fillRect(x, y + 6, TILE, 1); }
+  g.fillStyle = RAIL.bal; for (let i = 3; i < TILE - 2; i += 4) g.fillRect(x + i, y + 3, 1, 4);
+  g.fillStyle = RAIL.hand; g.fillRect(x, y + 1, TILE, 2);
+  g.fillStyle = RAIL.post; g.fillRect(x, y, 2, 7); g.fillRect(x + TILE - 2, y, 2, 7);
 }
-function railV(x, y, east) {                              // vertical rail segment (left / right faces)
+function railV(x, y, east, g = ctx, sh = true) {          // vertical rail segment (left / right faces)
   const hx = east ? x + 4 : x + 1, bx = east ? x + 1 : x + 3;
-  ctx.fillStyle = RAIL.shadow; ctx.fillRect(east ? x : x + 6, y, 1, TILE);
-  ctx.fillStyle = RAIL.bal; for (let i = 3; i < TILE - 2; i += 4) ctx.fillRect(bx, y + i, 3, 1);
-  ctx.fillStyle = RAIL.hand; ctx.fillRect(hx, y, 2, TILE);
-  ctx.fillStyle = RAIL.post; ctx.fillRect(x, y, 7, 2); ctx.fillRect(x, y + TILE - 2, 7, 2);
+  if (sh) { g.fillStyle = RAIL.shadow; g.fillRect(east ? x : x + 6, y, 1, TILE); }
+  g.fillStyle = RAIL.bal; for (let i = 3; i < TILE - 2; i += 4) g.fillRect(bx, y + i, 3, 1);
+  g.fillStyle = RAIL.hand; g.fillRect(hx, y, 2, TILE);
+  g.fillStyle = RAIL.post; g.fillRect(x, y, 7, 2); g.fillRect(x, y + TILE - 2, 7, 2);
 }
 function drawGuardRail(px, py, tx, ty) {
   const open = (x, y) => !isPlanted(x, y) && !isSolid(x, y);   // floor / path next to the planted area
@@ -133,6 +120,25 @@ function drawGuardRail(px, py, tx, ty) {
   if (open(tx, ty + 1)) railH(px, py + TILE - 7);
   if (open(tx - 1, ty)) railV(px, py, false);
   if (open(tx + 1, ty)) railV(px + TILE - 7, py, true);
+}
+
+// ---- foliage overlay: plants growing out through / over the guard rails (painted once per zone, see foliage.js) ----------
+const foliageLayers = {};
+function foliageLayer() {
+  if (!foliageLayers[zoneId]) foliageLayers[zoneId] = buildOverlay({
+    zoneId, cols, rows, widthPx, heightPx, getTile, isPlanted,
+    isOpen: (x, y) => !isPlanted(x, y) && !isSolid(x, y),
+    isSpill: (x, y) => getTile(x, y) === 'q' || isTierCh(getTile(x, y)),   // low walls and the big steps: hedges overgrow them
+    paintRail: (g, face, px, py) => {                         // the rail of one face, WITHOUT its shadow (the tile already drew that)
+      if (face === 'N') railH(px, py, g, false); else if (face === 'S') railH(px, py + TILE - 7, g, false);
+      else if (face === 'W') railV(px, py, false, g, false); else railV(px + TILE - 7, py, true, g, false);
+    },
+  });
+  return foliageLayers[zoneId];
+}
+function drawFoliage(x0, x1, y0, y1) {                        // stamp the visible part over the tiles (before the player, so he walks in front)
+  const sx = x0 * TILE, sy = y0 * TILE, sw = (x1 - x0 + 1) * TILE, sh = (y1 - y0 + 1) * TILE;
+  ctx.drawImage(foliageLayer(), sx, sy, sw, sh, sx, sy, sw, sh);
 }
 
 // ---- concrete bench (C) and tree planter (T) -------------------------------------------------------
@@ -435,6 +441,90 @@ function drawTier(px, py, tx, ty, L, base = false) {
   ctx.restore();
 }
 
+// ---- the two BIG outer tier blocks (zone 1, x5-7 and x14-16): nested L-shaped layers, painted as ONE smooth piece ---------
+// In the real amphitheatre these are not a grid of tiles: each side is a stack of long concrete layers. Every layer is an "L"
+// hugging the pit (one arm along the front, one along the flight), its outer corner swept round in a big smooth curve, with a
+// curved riser below it that follows the same curve. Each higher layer is the same shape pulled back toward the hedge.
+// A block is found automatically = a group of connected tier tiles (1-8) that sits on a flat base slab (m). The digits in the map
+// only mark WHERE the block is (all of it is solid); the layers are drawn from the block's size: one layer per tile of width.
+// The middle block between the two flights has no base slab, so it keeps the tile-by-tile steps (drawTier).
+// TWEAK ME:
+const LAYER_W = 32;       // width of every layer's tread band (px)
+const CORNER_R = 28;      // roundness of every layer's outer corner (px)
+const RISER_S = 9;        // height of the riser facing the front (south)
+const RISER_SIDE = 4;     // width of the side wall facing the pit
+const TREAD = ['#a6a49c', '#aeaca4', '#b6b4ab', '#bdbbb2'];   // tread colour of layer 1, 2, 3...: higher = a touch lighter (layer 1 matches the semi-wall cap)
+const isTierCh = (c) => (c >= '1' && c <= '8' && c.length === 1) || c === 'm';
+const tierBlockCache = {};
+function tierBlocks() {
+  if (tierBlockCache[zoneId]) return tierBlockCache[zoneId];
+  const byTile = new Map(), seen = new Set();
+  for (let ty = 0; ty < rows; ty++) for (let tx = 0; tx < cols; tx++) {
+    if (!isTierCh(getTile(tx, ty)) || seen.has(tx + ',' + ty)) continue;
+    const stack = [[tx, ty]], tiles = [];
+    let hasBase = false, x0 = tx, x1 = tx, y0 = ty, y1 = ty;
+    seen.add(tx + ',' + ty);
+    while (stack.length) {                                           // flood fill the connected group
+      const [x, y] = stack.pop(); tiles.push([x, y]);
+      if (getTile(x, y) === 'm') hasBase = true;
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy, k = nx + ',' + ny;
+        if (isTierCh(getTile(nx, ny)) && !seen.has(k)) { seen.add(k); stack.push([nx, ny]); }
+      }
+    }
+    if (!hasBase || tiles.length !== (x1 - x0 + 1) * (y1 - y0 + 1)) continue;   // only solid rectangles standing on a base slab
+    const outerWest = isPlanted(x0 - 1, y0) || getTile(x0 - 1, y0) === 'q';      // hedge / wall on the west = the pit is to the east (else mirrored)
+    const blk = { tx0: x0, ty0: y0, img: paintTierBlock((x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE, outerWest, x0 * 7 + y0) };
+    for (const [x, y] of tiles) byTile.set(x + ',' + y, blk);
+  }
+  return (tierBlockCache[zoneId] = byTile);
+}
+// W x H px block. outerWest: the back of the block (hedge side) is the west edge and the pit is east; otherwise mirrored.
+function paintTierBlock(W, H, outerWest, seed) {
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const layers = Math.max(1, Math.min(TREAD.length, Math.floor(W / LAYER_W)));
+  const shape = (x0, y0, x1, y1, r) => {                              // rectangle with ONLY the pit-side bottom corner rounded
+    g.beginPath(); g.roundRect(x0, y0, x1 - x0, y1 - y0, outerWest ? [0, 0, r, 0] : [0, 0, 0, r]);
+  };
+  const sideCol = outerWest ? '#5e5c56' : '#8a877f';                   // wall facing the pit: shaded on the east, lit on the west
+  let prev = null;
+  for (let k = 0; k < layers; k++) {
+    const inset = k * LAYER_W;
+    const x0 = outerWest ? 0 : inset, x1 = outerWest ? W - inset : W, y1 = H - inset;   // footprint of layer k (tread + risers)
+    if (prev) {                                                        // the layer below sits in the shadow of this one
+      g.save(); shape(prev.tx0, 0, prev.tx1, prev.ty1, CORNER_R - 6); g.clip();
+      g.globalAlpha = 0.20; g.fillStyle = '#000'; shape(x0 + 3, 0, x1 + 3, y1 + 5, CORNER_R); g.fill(); g.globalAlpha = 1;
+      g.restore();
+    }
+    shape(x0, 0, x1, y1, CORNER_R); g.fillStyle = '#6f6d66'; g.fill();           // riser colour fills the whole footprint...
+    g.save(); shape(x0, 0, x1, y1, CORNER_R); g.clip();                        // ...with the side wall in its own shade
+    g.fillStyle = sideCol; g.fillRect(outerWest ? x1 - RISER_SIDE - 2 : x0, 0, RISER_SIDE + 2, y1 - 6);
+    g.restore();
+    const t = { tx0: outerWest ? x0 : x0 + RISER_SIDE, tx1: outerWest ? x1 - RISER_SIDE : x1, ty1: y1 - RISER_S };   // the tread: footprint minus the risers
+    shape(t.tx0, 0, t.tx1, t.ty1, CORNER_R - 5); g.fillStyle = TREAD[k]; g.fill();
+    g.save(); shape(t.tx0, 0, t.tx1, t.ty1, CORNER_R - 5); g.clip();
+    for (let i = 0; i < 70; i++) {                                     // concrete speckle
+      const sx = t.tx0 + rnd(seed, k, i) * (t.tx1 - t.tx0), sy = rnd(seed, k, i + 90) * t.ty1;
+      g.fillStyle = i % 2 ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.13)'; g.fillRect(Math.round(sx), Math.round(sy), 2, 1);
+    }
+    g.strokeStyle = 'rgba(255,255,255,0.28)'; g.lineWidth = 2; shape(t.tx0, 0, t.tx1, t.ty1, CORNER_R - 5); g.stroke();   // lit rim all round the tread (the stroke is clipped to its inside)
+    g.strokeStyle = 'rgba(0,0,0,0.22)'; g.lineWidth = 2; g.beginPath();                                                   // crease where tread meets the front riser
+    const cx0 = outerWest ? t.tx0 : t.tx0 + CORNER_R - 5, cx1 = outerWest ? t.tx1 - CORNER_R + 5 : t.tx1;
+    g.moveTo(cx0, t.ty1 - 1); g.lineTo(cx1, t.ty1 - 1); g.stroke();
+    g.restore();
+    prev = t;
+  }
+  return c;
+}
+function stampTierBlock(px, py, tx, ty) {                              // the 32x32 piece of a block that belongs to this tile
+  const b = tierBlocks().get(tx + ',' + ty);
+  if (!b) return false;
+  ctx.drawImage(b.img, (tx - b.tx0) * TILE, (ty - b.ty0) * TILE, TILE, TILE, px, py, TILE, TILE);
+  return true;
+}
+
 // ---- semi-wall (q): the low concrete planter wall around the hedge beds (zone 1) ----------------------------------------
 // Same board-formed concrete as the '#' walls (vertical seams, darker base), a touch lighter so it reads as a low wall, with a lit
 // cap on top and a darker front face wherever the wall faces open floor to the south.
@@ -594,9 +684,9 @@ function drawTile(ch, px, py, tx, ty, time) {
     ctx.fillStyle = '#6a6a76'; ctx.fillRect(px, py, TILE, 3);
     ctx.fillStyle = '#3b3b45'; ctx.fillRect(px, py + TILE - 6, TILE, 6);
   } else if (ch >= '1' && ch <= '8') {                // amphitheatre tier (zone 1, upper section)
-    drawTier(px, py, tx, ty, +ch);
+    if (!stampTierBlock(px, py, tx, ty)) drawTier(px, py, tx, ty, +ch);   // big outer blocks: smooth L layers; the middle block: tile steps
   } else if (ch === 'm') {                            // flat base slab under the outer tier flights
-    drawSemiWall(px, py, tx, ty, true);               // exactly the semi-wall's colour + texture, so wall and base read as one piece
+    if (!stampTierBlock(px, py, tx, ty)) drawSemiWall(px, py, tx, ty, true);               // exactly the semi-wall's colour + texture, so wall and base read as one piece
   } else if (ch === 'q') {                            // hedge semi-wall
     drawSemiWall(px, py, tx, ty);
   } else if (ch === 'S' && zoneId === 'zone1') {      // zone 1: the two railed stair flights
@@ -735,6 +825,7 @@ export function render(game, time) {
       drawTile(getTile(tx, ty), tx * TILE, ty * TILE, tx, ty, time);
   if (zoneId === 'zone1') drawEscalatorNose(x0, x1, y0, y1, time);
   if (zoneId === 'zone1') drawBasementBlock(camera);   // storage-room stairwell (k / z tiles)   // the escalator well + rounded end of the escalator railing
+  drawFoliage(x0, x1, y0, y1);                       // leaves poking through / over the hedge rails
   drawGlassTops(ctx, time, camera, VW, VH);          // glass skylight + the students seen through it (after tiles, before characters)
 
   // Item (ID card): small white card with a bobbing motion
