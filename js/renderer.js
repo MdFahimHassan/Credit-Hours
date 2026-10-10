@@ -453,6 +453,8 @@ const LAYER_W = 32;       // width of every layer's tread band (px)
 const CORNER_R = 28;      // roundness of every layer's outer corner (px)
 const RISER_S = 9;        // height of the riser facing the front (south)
 const RISER_SIDE = 4;     // width of the side wall facing the pit
+const TURN_R = 22;        // roundness of the turn towards the middle (px): bigger = smoother, smaller = pointier
+const STEP_H = 40;        // height (px) between the turns of neighbouring layers at the top: the highest layer turns at STEP_H, the next at 2 x STEP_H...
 const TREAD = ['#a6a49c', '#aeaca4', '#b6b4ab', '#bdbbb2'];   // tread colour of layer 1, 2, 3...: higher = a touch lighter (layer 1 matches the semi-wall cap)
 const isTierCh = (c) => (c >= '1' && c <= '8' && c.length === 1) || c === 'm';
 const tierBlockCache = {};
@@ -481,40 +483,55 @@ function tierBlocks() {
   return (tierBlockCache[zoneId] = byTile);
 }
 // W x H px block. outerWest: the back of the block (hedge side) is the west edge and the pit is east; otherwise mirrored.
+// Like the real steps: layer 0 (the lowest) runs along the stair flight; every higher layer's pit-side edge runs up, then at ITS OWN height
+// turns 90 degrees towards the middle and runs on until it meets the small stairs. The higher the layer, the further up it turns.
 function paintTierBlock(W, H, outerWest, seed) {
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d');
   const layers = Math.max(1, Math.min(TREAD.length, Math.floor(W / LAYER_W)));
-  const shape = (x0, y0, x1, y1, r) => {                              // rectangle with ONLY the pit-side bottom corner rounded
-    g.beginPath(); g.roundRect(x0, y0, x1 - x0, y1 - y0, outerWest ? [0, 0, r, 0] : [0, 0, 0, r]);
+  const s = outerWest ? 1 : -1, P = outerWest ? W : 0;                  // P = the far end of the turns: the side of the block that touches the stair flight
+  // outline: back edge bk, pit-side edge p, bottom y1 (bottom pit corner rounded r), and above row yb the layer runs on to P (the 90-degree turn)
+  const shape = (bk, p, y1, r, yb, fil = TURN_R) => {
+    g.beginPath(); g.moveTo(bk, 0); g.lineTo(P, 0);
+    if (yb > 0 && p !== P) { g.lineTo(P, yb); g.arcTo(p, yb, p, yb + fil, fil); }   // the turn: a smooth inside curve, not a sharp corner
+    g.lineTo(p, y1 - r); g.arcTo(p, y1, p - s * r, y1, r); g.lineTo(bk, y1); g.closePath();
   };
   const sideCol = outerWest ? '#5e5c56' : '#8a877f';                   // wall facing the pit: shaded on the east, lit on the west
   let prev = null;
   for (let k = 0; k < layers; k++) {
-    const inset = k * LAYER_W;
+    const inset = k * LAYER_W, yb = k === 0 ? 0 : (layers - k) * STEP_H;   // yb: where layer k turns towards the middle
     const x0 = outerWest ? 0 : inset, x1 = outerWest ? W - inset : W, y1 = H - inset;   // footprint of layer k (tread + risers)
+    const bk = outerWest ? x0 : x1, p = outerWest ? x1 : x0;
     if (prev) {                                                        // the layer below sits in the shadow of this one
-      g.save(); shape(prev.tx0, 0, prev.tx1, prev.ty1, CORNER_R - 6); g.clip();
-      g.globalAlpha = 0.20; g.fillStyle = '#000'; shape(x0 + 3, 0, x1 + 3, y1 + 5, CORNER_R); g.fill(); g.globalAlpha = 1;
+      g.save(); shape(prev.bk, prev.p, prev.ty1, CORNER_R - 6, prev.yb); g.clip();
+      g.globalAlpha = 0.20; g.fillStyle = '#000'; shape(bk + 3, p + 3, y1 + 5, CORNER_R, yb + 4); g.fill(); g.globalAlpha = 1;
       g.restore();
     }
-    shape(x0, 0, x1, y1, CORNER_R); g.fillStyle = '#6f6d66'; g.fill();           // riser colour fills the whole footprint...
-    g.save(); shape(x0, 0, x1, y1, CORNER_R); g.clip();                        // ...with the side wall in its own shade
-    g.fillStyle = sideCol; g.fillRect(outerWest ? x1 - RISER_SIDE - 2 : x0, 0, RISER_SIDE + 2, y1 - 6);
+    shape(bk, p, y1, CORNER_R, yb); g.fillStyle = '#6f6d66'; g.fill();           // riser colour fills the whole footprint...
+    g.save(); shape(bk, p, y1, CORNER_R, yb); g.clip();                        // ...with the side wall in its own shade
+    const top = yb ? yb + TURN_R : 0;                                         // the straight part of the side wall starts below the curve...
+    g.fillStyle = sideCol; g.fillRect(outerWest ? p - RISER_SIDE - 2 : p, top, RISER_SIDE + 2, y1 - 6 - top);
+    if (yb) {                                                                  // ...and the curve gets the same wall shade, following the curve
+      const gr = g.createLinearGradient(p + s * TURN_R, yb, p, yb + TURN_R); gr.addColorStop(0, '#6f6d66'); gr.addColorStop(1, sideCol);   // front-riser shade -> side-wall shade, so there is no hard edge
+      g.strokeStyle = gr; g.lineWidth = 2 * (RISER_SIDE + 2); g.beginPath();
+      g.arc(p + s * TURN_R, yb + TURN_R, TURN_R, outerWest ? Math.PI : 0, 1.5 * Math.PI, !outerWest); g.stroke();
+    }
     g.restore();
-    const t = { tx0: outerWest ? x0 : x0 + RISER_SIDE, tx1: outerWest ? x1 - RISER_SIDE : x1, ty1: y1 - RISER_S };   // the tread: footprint minus the risers
-    shape(t.tx0, 0, t.tx1, t.ty1, CORNER_R - 5); g.fillStyle = TREAD[k]; g.fill();
-    g.save(); shape(t.tx0, 0, t.tx1, t.ty1, CORNER_R - 5); g.clip();
-    for (let i = 0; i < 70; i++) {                                     // concrete speckle
-      const sx = t.tx0 + rnd(seed, k, i) * (t.tx1 - t.tx0), sy = rnd(seed, k, i + 90) * t.ty1;
+    const t = { bk, p: outerWest ? p - RISER_SIDE : p + RISER_SIDE, ty1: y1 - RISER_S, yb: yb ? yb - RISER_S : 0 };   // the tread: footprint minus the risers
+    const tShape = () => shape(t.bk, t.p, t.ty1, CORNER_R - 5, t.yb, TURN_R + 5);   // a bit wider curve: same centre as the footprint's
+    tShape(); g.fillStyle = TREAD[k]; g.fill();
+    g.save(); tShape(); g.clip();
+    for (let i = 0; i < 90; i++) {                                     // concrete speckle
+      const sx = rnd(seed, k, i) * W, sy = rnd(seed, k, i + 90) * t.ty1;
       g.fillStyle = i % 2 ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.13)'; g.fillRect(Math.round(sx), Math.round(sy), 2, 1);
     }
-    g.strokeStyle = 'rgba(255,255,255,0.28)'; g.lineWidth = 2; shape(t.tx0, 0, t.tx1, t.ty1, CORNER_R - 5); g.stroke();   // lit rim all round the tread (the stroke is clipped to its inside)
+    g.strokeStyle = 'rgba(255,255,255,0.28)'; g.lineWidth = 2; tShape(); g.stroke();   // lit rim all round the tread (the stroke is clipped to its inside)
     g.strokeStyle = 'rgba(0,0,0,0.22)'; g.lineWidth = 2; g.beginPath();                                                   // crease where tread meets the front riser
-    const cx0 = outerWest ? t.tx0 : t.tx0 + CORNER_R - 5, cx1 = outerWest ? t.tx1 - CORNER_R + 5 : t.tx1;
+    const cx0 = outerWest ? t.bk : t.p + CORNER_R - 5, cx1 = outerWest ? t.p - CORNER_R + 5 : t.bk;
     g.moveTo(cx0, t.ty1 - 1); g.lineTo(cx1, t.ty1 - 1); g.stroke();
+    if (yb) { g.beginPath(); g.moveTo(t.p + s * (TURN_R + 5), t.yb - 1); g.lineTo(P, t.yb - 1); g.stroke(); }   // only along the straight part, not into the curve                              // ...and under the turned part
     g.restore();
-    prev = t;
+    prev = { bk, p, ty1: y1, yb };
   }
   return c;
 }
