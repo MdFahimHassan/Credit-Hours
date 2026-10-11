@@ -58,6 +58,25 @@ const SKIP = { zone1: ['w'] };
 const WINDOW_FILL = { zone1: { e: [[8, 21]] } };
 const WALL_STYLE = { zone1: { n: 'terrace' } };
 const wallStyle = (zid, side) => WALL_STYLE[zid]?.[side] ?? 'concrete';
+// EXTEND: the skyline of this side carries on past the START of the edge (u < 0) instead of ending in a cream-wall corner.
+//   zone 1: the east skyline runs on up past the top-right corner, the south skyline runs on left past the bottom-left corner.
+//   It also carries on past the END of the edge, so the bottom-right corner (east + south) can turn smoothly (see drawCorner).
+const EXTEND = { zone1: { e: true, s: true } };
+const EXT = 480;                // how far (px) the skyline carries on past the corner (the camera can never show more than PH = 320)
+// STAIRS_DARK: flights of stairs on these zones do NOT show steps / rails / extra view beyond the edge: the stairs lead straight
+// up to the next level (zone 1: the lawn, painted by renderer.js). The camera does not slide out for them either.
+const STAIRS_DARK = ['zone1'];
+// SHARE: this side's skyline window does not paint its own picture, it shows the picture of another side (in THAT side's direction, so
+//   nothing turns). zone 1: the north window (x 31-37, top right) shows the east skyline, which simply carries on to the left.
+//   The source side gets DNEG extra px of near ground on the "wrong" side of its edge for that (see paintPano, dneg).
+const SHARE = { zone1: { n: 'e' } };
+const DNEG = 240;
+// OPEN_END: this side's window has no concrete pier at its far end (its picture goes on round the corner)
+const OPEN_END = { zone1: ['n'] };
+// LINK: sides whose skylines are one picture round a corner: they share the same fog clearness so no seam shows
+const LINK = { zone1: ['n', 'e', 's'] };
+// ROAD_FIX: the street round the corner must have the same distance / width on both sides so the two roads meet in a clean mitre
+const ROAD_FIX = { zone1: { e: { d: 46, h: 12 }, s: { d: 46, h: 12 } } };
 
 // ---------------------------------------------------------------------------------------------
 // Which parts of the edges are rails (skyline windows) and which are exits (paths / stairs). Cached per zone.
@@ -70,11 +89,14 @@ function features() {
   for (const s of SIDES) {
     const n = s === 'n' || s === 's' ? cols : rows;
     const at = (i) => s === 'n' ? [i, 0] : s === 's' ? [i, rows - 1] : s === 'w' ? [0, i] : [cols - 1, i];
-    const rails = [], exits = [], set = new Set();
+    const rails = [], exits = [], exitsView = [], set = new Set();
     for (let i = 0; i < n; i++) {
       const [x, y] = at(i);
       if (getTile(x, y) === 'R' && !skip.includes(s)) { rails.push(i); set.add(i); }
-      if (getExit(x, y)) exits.push(i);
+      if (getExit(x, y)) {
+        exits.push(i);
+        if (!(STAIRS_DARK.includes(zoneId) && getTile(x, y) === 'S')) exitsView.push(i);   // dark stairs never pull the camera out
+      }
     }
     if (!skip.includes(s)) for (const [a, b] of WINDOW_FILL[zoneId]?.[s] ?? []) for (let i = a; i <= b; i++) set.add(i);
     const sorted = [...set].sort((x, y) => x - y), windows = [];
@@ -90,7 +112,9 @@ function features() {
       else { if (g) groups.push(g); g = { a: i, b: i, segs: [{ a: i, b: i, stairs: st }] }; }
     }
     if (g) groups.push(g);
-    feat[s] = { len: n * TILE, rails, exits, windows, groups };
+    const ex = EXTEND[zoneId]?.[s] ? EXT : 0;
+    feat[s] = { len: n * TILE, rails, exits, exitsView, windows, groups, ext: ex, extEnd: ex,
+                dneg: Object.values(SHARE[zoneId] ?? {}).includes(s) ? DNEG : 0, share: SHARE[zoneId]?.[s] ?? null };
   }
   return feat;
 }
@@ -143,7 +167,7 @@ export const skyline = {
     for (const s of SIDES) {
       const F = f[s];
       const dw = F.rails.length ? edgeDist(s, p, F.rails, TILE) : Infinity;
-      const dp = F.exits.length ? edgeDist(s, p, F.exits, 0) : Infinity;
+      const dp = F.exitsView.length ? edgeDist(s, p, F.exitsView, 0) : Infinity;
       let tw = clamp01(1 - dw / NEAR);
       if (this.leaning && s === this.leanSide) tw = 1;
       this.close[s] += (tw - this.close[s]) * Math.min(1, dt * 4);
@@ -284,10 +308,11 @@ function railRun(g, m, L) {
 // floor (slabs or stairs) + a railing on each side + dark space behind the rails, all fading to black with distance.
 // ---------------------------------------------------------------------------------------------
 function paintExit(g, grp) {
+  if (STAIRS_DARK.includes(zoneId) && grp.segs.every((s) => s.stairs)) return;   // nothing beyond the top of a dark flight (zone 1: renderer.js paints the lawn there)
   const u0 = grp.a * TILE, u1 = (grp.b + 1) * TILE, w = u1 - u0;
   const stairsAny = grp.segs.some((s) => s.stairs), L = stairsAny ? STAIR_LEN : PATH_LEN;
-  const RW = 24, FE = 56;                                          // rail band width, feather width on each side
-  const x0 = u0 - RW - FE, tw = w + 2 * (RW + FE);
+  const RW = 24;                                                   // rail band width. Nothing (no shadow, no fade) is painted outside the rails: the wall beside a path stays plain
+  const x0 = u0 - RW, tw = w + 2 * RW;
   const t = mkCanvas(tw, PH), h = t.getContext('2d');
   h.translate(-x0, 0);                                             // from here on x = u (same numbers as the side's own frame)
   // dark space around and behind the rails
@@ -331,12 +356,6 @@ function paintExit(g, grp) {
   }
   fg.addColorStop(Math.min(1, L / PH), 'rgba(0,0,0,1)'); fg.addColorStop(1, 'rgba(0,0,0,1)');
   h.fillStyle = fg; h.fillRect(x0, 0, tw, PH);
-  // feather the two outer edges so the dark space melts into the cream wall instead of ending in a hard line
-  h.setTransform(1, 0, 0, 1, 0, 0); h.globalCompositeOperation = 'destination-in';
-  const mk = h.createLinearGradient(0, 0, tw, 0);
-  mk.addColorStop(0, 'rgba(0,0,0,0)'); mk.addColorStop(FE / tw, 'rgba(0,0,0,1)');
-  mk.addColorStop(1 - FE / tw, 'rgba(0,0,0,1)'); mk.addColorStop(1, 'rgba(0,0,0,0)');
-  h.fillStyle = mk; h.fillRect(0, 0, tw, PH);
   g.drawImage(t, x0, 0);
 }
 
@@ -545,18 +564,22 @@ function cluster(side, g, rnd, cfg, u, k) {
 }
 
 // soft(): paint a layer at half resolution and scale it up, which blurs it a little. Far things are out of focus.
-function soft(g, spanPx, fn) {
+function soft(g, spanPx, fn, dOff = 0) {
   const t = mkCanvas(spanPx / 2, PH / 2), h = t.getContext('2d');
   h.scale(Z / 2, Z / 2); fn(h);
   const prev = g.imageSmoothingEnabled;
   g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
-  g.drawImage(t, 0, 0, t.width * 2, t.height * 2); g.restore(); g.imageSmoothingEnabled = prev;
+  g.drawImage(t, 0, dOff, t.width * 2, t.height * 2); g.restore(); g.imageSmoothingEnabled = prev;
 }
 
-function buildPano(side, zid) {
-  const F = features()[side], len = F.len, cfg = COMP[side], rnd = rng(hashStr(zid + side));
-  const c = mkCanvas(len, PH), g = c.getContext('2d');
-  const spanO = len / Z, road = cfg.road;                         // painting units: everything below is in zoomed units
+// paints ONE skyline picture `len` px wide (u = 0 at its left edge)
+// dneg > 0: the picture also has `dneg` px BEFORE d = 0 (canvas y = 0 is d = -dneg; it is the mirror image of d = 0 ... dneg), so a side that
+// shows this picture can carry on to the "wrong" side of the edge line. Nothing is changed for d >= 0.
+function paintPano(side, len, rnd, grainSeed, dneg = 0, zid = '') {
+  const cfg = COMP[side];
+  const c = mkCanvas(len, PH + dneg), g = c.getContext('2d');
+  const spanO = len / Z, road = ROAD_FIX[zid]?.[side] ? { ...cfg.road, ...ROAD_FIX[zid][side] } : cfg.road;   // painting units: everything below is in zoomed units
+  g.translate(0, dneg);
   g.scale(Z, Z);
 
   // ground near the rail (d small) up to the sky (d large)
@@ -581,7 +604,7 @@ function buildPano(side, zid) {
   soft(g, len, (h) => {
     layer(h, rnd, cfg, { u0: 0, u1: spanO, base: [222, 238], w: [10, 26], h: [26, 62], tallH: [62, 92], tall: cfg.tall, haze: 0.80, win: false });
     layer(h, rnd, cfg, { u0: 0, u1: spanO, base: [196, 214], w: [10, 28], h: [24, 70], tallH: [70, 96], tall: cfg.tall * 0.6, haze: 0.64, win: false });
-  });
+  }, dneg);
   layer(g, rnd, cfg, { u0: 0, u1: spanO, base: [136, 158], w: [10, 26], h: [22, 56], haze: 0.34, win: true });
   for (let u = 160, k = 0; u < spanO + 100; u += 520 + rnd() * 80, k++) cluster(side, g, rnd, cfg, u, k);
   layer(g, rnd, cfg, { u0: 0, u1: spanO, base: [94, 116], w: [12, 30], h: [18, 46], haze: 0.14, win: true });
@@ -598,19 +621,42 @@ function buildPano(side, zid) {
     roofsPass(g, rnd, 0, spanO, 34, 72, hz);
     roofsPass(g, rnd, 0, spanO, 4, 40, hz);
   }
+  if (dneg) {                                                     // the near side of the edge line: the first `dneg` px of the picture mirrored (and slid along the edge so the mirror does not show), so the street and roofs simply go on
+    const tmp = mkCanvas(len, dneg); tmp.getContext('2d').drawImage(c, 0, dneg, len, dneg, 0, 0, len, dneg);
+    const slide = Math.round(len * 0.37);
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.translate(0, dneg); g.scale(1, -1);
+    g.drawImage(tmp, slide, 0); g.drawImage(tmp, slide - len, 0);
+    g.restore();
+  }
   const shade = g.createLinearGradient(0, 0, 0, 44);              // the building's own shadow along the foot
   shade.addColorStop(0, 'rgba(10,10,14,0.45)'); shade.addColorStop(1, 'rgba(10,10,14,0)');
-  g.fillStyle = shade; g.fillRect(0, 0, spanO, 44);
-  g.fillStyle = rgba('#ffb86e', cfg.warm); g.fillRect(0, 0, spanO, EO);          // golden-hour tint
+  if (!dneg) { g.fillStyle = shade; g.fillRect(0, 0, spanO, 44); }   // (a picture that goes on past its edge line has no foot shadow: it would show as a line there)
+  g.fillStyle = rgba('#ffb86e', cfg.warm); g.fillRect(0, -dneg / Z, spanO, EO + dneg / Z);          // golden-hour tint
 
   // fine film grain so nothing looks like flat vector shapes
   g.setTransform(1, 0, 0, 1, 0, 0);
-  const gr = rng(hashStr(zid + side + 'grain'));
-  for (let i = 0; i < len * PH / 90; i++) {
+  const gr = rng(hashStr(grainSeed));
+  for (let i = 0; i < len * (PH + dneg) / 90; i++) {
     g.fillStyle = i % 2 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
-    g.fillRect(Math.floor(gr() * len), Math.floor(gr() * PH), 1, 1);
+    g.fillRect(Math.floor(gr() * len), Math.floor(gr() * (PH + dneg)), 1, 1);
   }
+  return c;
+}
 
+function buildPano(side, zid) {
+  const F = features()[side], len = F.len, cfg = COMP[side], rnd = rng(hashStr(zid + side)), dneg = F.dneg;
+  const road = ROAD_FIX[zid]?.[side] ? { ...cfg.road, ...ROAD_FIX[zid][side] } : cfg.road;
+  const off = F.ext, offEnd = F.extEnd;                           // px of extra skyline before u = 0 and after u = len (the corners that are not corners)
+  const main = paintPano(side, len, rnd, zid + side + 'grain', dneg, zid);
+  let c = main;
+  if (off || offEnd) {                                            // [ extension | main | extension ]: the same painting, simply carried on past the corners
+    c = mkCanvas(off + len + offEnd, PH + dneg);
+    const cg = c.getContext('2d');
+    if (off) cg.drawImage(paintPano(side, off, rng(hashStr(zid + side + 'ext')), zid + side + 'extgrain', dneg, zid), 0, 0);
+    cg.drawImage(main, off, 0);
+    if (offEnd) cg.drawImage(paintPano(side, offEnd, rng(hashStr(zid + side + 'ext2')), zid + side + 'ext2grain', dneg, zid), off + len, 0);
+  }
+  const tot = off + len + offEnd, spanO = tot / Z;
   // things that move (drawn every frame by drawSide, in painting units)
   const cars = [];
   if (road) for (let i = 0; i < Math.floor(spanO / 110 * road.cars); i++)
@@ -621,8 +667,8 @@ function buildPano(side, zid) {
   for (let i = 0; i < 3; i++) birds.push({ u: rnd() * spanO, d: range([250, 350], rnd()), v: range([10, 22], rnd()) * (rnd() < 0.5 ? -1 : 1), ph: rnd() * 6 });
   // drifting fog banks: they thin out (and finally vanish) as you come close to the rail
   const wisps = [];
-  for (let i = 0; i < Math.ceil(len / 150); i++) wisps.push({ u: rnd() * len, d: range([14, PH - 30], rnd()), w: range([170, 360], rnd()), v: range([3, 9], rnd()) * (rnd() < 0.5 ? -1 : 1), a: range([0.35, 0.70], rnd()), s: rnd() });
-  return { canvas: c, len, cfg, road, cars, clouds, birds, wisps };
+  for (let i = 0; i < Math.ceil(tot / 150); i++) wisps.push({ u: rnd() * tot, d: range([14, PH - 30], rnd()), w: range([170, 360], rnd()), v: range([3, 9], rnd()) * (rnd() < 0.5 ? -1 : 1), a: range([0.35, 0.70], rnd()), s: rnd() });
+  return { canvas: c, len, off, tot, dneg, cfg, road, cars, clouds, birds, wisps };
 }
 
 // one soft fog blob, painted once and stamped many times
@@ -649,8 +695,13 @@ function layers(side) {
   const F = features()[side];
   return (cache[key] = {
     deco: buildDeco(side, zoneId),
-    pano: F.windows.length ? buildPano(side, zoneId) : null,
-    wins: F.windows.map((w) => ({ u0: w.a * TILE, u1: (w.b + 1) * TILE })),
+    pano: F.windows.length && !F.share ? buildPano(side, zoneId) : null,    // a shared window shows another side's picture
+    share: F.share,
+    off: F.ext,
+    wins: F.windows.map((w) => {
+      const openA = !!F.ext && w.a === 0, openB = (!!F.extEnd && (w.b + 1) * TILE === F.len) || (OPEN_END[zoneId]?.includes(side) && (w.b + 1) * TILE === F.len);
+      return { u0: openA ? -F.ext : w.a * TILE, u1: (w.b + 1) * TILE + (F.extEnd && openB ? F.extEnd : 0), openA, openB };
+    }),
   });
 }
 
@@ -675,29 +726,32 @@ export function drawSkyline(ctx, camera, VW, VH, time) {
   ctx.fillStyle = wallFill(ctx);                                  // the cream wall of the building, everywhere beyond the map
   ctx.fillRect(camera.x, camera.y, VW, VH);
   for (const s of SIDES) if (skyline.over[s] >= 0.5) drawSide(ctx, s, time);
+  drawCorner(ctx, time);
 }
+
+// local frame of a side -> world: x = along the edge, y = away from it (1:1, a flip / quarter turn, NO scaling)
+const sideMatrix = (side) => ({ e: [0, 1, 1, 0, widthPx, 0], w: [0, 1, -1, 0, 0, 0], n: [1, 0, 0, -1, 0, 0], s: [1, 0, 0, 1, 0, heightPx] }[side]);
 
 // One side: deco (wall details, exit paths), then the skyline + fog inside the window(s), vines, concrete piers.
 function drawSide(g, side, time) {
   const L = layers(side), F = features()[side], W = widthPx, H = heightPx;
-  const over = Math.min(PH, Math.ceil(skyline.over[side])), len = F.len;
+  const over = Math.min(PH, Math.ceil(skyline.over[side])), len = F.len, ext = F.ext;
   g.save();
-  g.beginPath();                                               // only the strip beyond this edge (not the corners: those are plain wall)
-  if (side === 'e') g.rect(W, 0, over, H);
+  g.beginPath();                                               // only the strip beyond this edge; a side with an extension also covers the corner at its start (see EXTEND)
+  if (side === 'e') g.rect(W, -ext, over, H + ext);            // (the corner at the END of e / s is drawn by drawCorner, as one turning picture)
   else if (side === 'w') g.rect(-over, 0, over, H);
   else if (side === 'n') g.rect(0, -over, W, over);
-  else g.rect(0, H, W, over);
+  else g.rect(-ext, H, W + ext, over);
   g.clip();
-  // local frame -> world, 1:1 (a flip / quarter turn, NO scaling): x = along the edge, y = away from it
-  const m = { e: [0, 1, 1, 0, W, 0], w: [0, 1, -1, 0, 0, 0], n: [1, 0, 0, -1, 0, 0], s: [1, 0, 0, 1, 0, H] }[side];
-  g.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+  g.transform(...sideMatrix(side));
   g.imageSmoothingEnabled = false;
   g.drawImage(L.deco, 0, 0);
 
-  if (L.pano) drawWindows(g, side, L, len, time);
+  if (L.pano || L.share) drawWindows(g, side, L, len, time);
 
-  for (const w of L.wins) {                                    // concrete piers where a window meets the wall
+  for (const w of L.wins) {                                    // concrete piers where a window meets the wall (none where the skyline carries on round a corner)
     for (const lit of [true, false]) {
+      if (lit ? w.openA : w.openB) continue;
       const x = lit ? w.u0 : w.u1 - 9;
       R(g, x, 0, 9, PH, '#aaa597'); R(g, lit ? x : x + 8, 0, 1, PH, lit ? '#cdc8b9' : 'rgba(0,0,0,0.30)');
       R(g, lit ? x + 7 : x, 0, 2, PH, 'rgba(0,0,0,0.20)');
@@ -707,16 +761,42 @@ function drawSide(g, side, time) {
   g.restore();
 }
 
+// how clear the air is for a side: linked sides (one skyline round a corner) share it, so no fog seam shows between them
+function fogDens(side) {
+  const group = LINK[zoneId]?.includes(side) ? LINK[zoneId] : [side];
+  const k = smooth(Math.max(...group.map((s) => skyline.close[s])));
+  let dens = lerp(FOG_FAR, FOG_NEAR, k);
+  if (skyline.leanSide && group.includes(skyline.leanSide)) dens *= 1 - 0.75 * skyline.lean;
+  return dens;
+}
+
 function drawWindows(g, side, L, len, time) {
-  const P = L.pano, cfg = P.cfg, spanO = len / Z;
-  const wrap = (v) => ((v % spanO) + spanO) % spanO;
   g.save();
   g.beginPath();
   for (const w of L.wins) g.rect(w.u0, 0, w.u1 - w.u0, PH);
   g.clip();
-  g.drawImage(P.canvas, 0, 0);                                 // the skyline at its real size
+  if (L.share) {                                               // this window shows another side's picture, in THAT side's direction
+    const src = layers(L.share);
+    g.save();
+    const inv = new DOMMatrix(sideMatrix(side)).inverse();
+    g.transform(inv.a, inv.b, inv.c, inv.d, inv.e, inv.f);
+    g.transform(...sideMatrix(L.share));
+    drawPicture(g, L.share, src.pano, time);
+    g.restore();
+  } else drawPicture(g, side, L.pano, time);
+  g.restore();
 
-  g.save(); g.scale(Z, Z);                                     // moving things, in painting units
+  const vines = vineStrands(zoneId, side);                     // hedge vines hanging over the edge (foliage.js VINE_EDGES): in front of the fog
+  if (vines.length) { drawVines(g, vines, time); drawVineLip(g, vines); }
+}
+
+// The picture of one side (skyline, traffic, clouds, birds, fog) in that side's local frame: u along the edge, d away from it.
+function drawPicture(g, side, P, time) {
+  const cfg = P.cfg, spanO = P.canvas.width / Z, off = P.off, len = P.len;
+  const wrap = (v) => ((v % spanO) + spanO) % spanO;
+  g.drawImage(P.canvas, -off, -P.dneg);                        // the skyline at its real size (starts `off` px before u = 0 when it carries on round a corner)
+
+  g.save(); g.translate(-off, 0); g.scale(Z, Z);               // moving things, in painting units
   g.fillStyle = cfg.sun ? '#ffe0aa' : '#ffffff';
   for (const c of P.clouds) {
     const u = wrap(c.u + time * c.v);
@@ -739,16 +819,15 @@ function drawWindows(g, side, L, len, time) {
   g.restore();
 
   // ---- FOG: thick milk when you are far from the rail, almost gone when you touch it ----
-  const k = smooth(skyline.close[side]);
-  let dens = lerp(FOG_FAR, FOG_NEAR, k);
-  if (side === skyline.leanSide) dens *= 1 - 0.75 * skyline.lean;
+  const dens = fogDens(side);
   if (dens > 0.004) {
     const vg = g.createLinearGradient(0, 0, 0, PH);            // the view clears from the rail outwards: far things stay misty longest
     vg.addColorStop(0, rgba(FOG_COL, clamp01(dens * 0.50))); vg.addColorStop(0.5, rgba(FOG_COL, clamp01(dens * 0.85))); vg.addColorStop(1, rgba(FOG_COL, clamp01(dens * 1.10)));
-    g.fillStyle = vg; g.fillRect(0, 0, len, PH);
+    g.fillStyle = vg; g.fillRect(-off, -P.dneg, P.tot, PH + P.dneg);
     const sp = wispSprite();                                   // slow drifting banks of mist on top
+    const T = P.tot + 400;
     for (const w of P.wisps) {
-      const u = ((w.u + time * w.v) % (len + 400) + len + 400) % (len + 400) - 200;
+      const u = ((w.u + time * w.v) % T + T) % T - 200 - off;
       const a = clamp01(w.a * Math.pow(dens, 0.8) * (0.8 + 0.2 * Math.sin(time * 0.3 + w.s * 6.28)));
       if (a < 0.01) continue;
       g.globalAlpha = a;
@@ -756,8 +835,46 @@ function drawWindows(g, side, L, len, time) {
     }
     g.globalAlpha = 1;
   }
-  g.restore();
+}
 
-  const vines = vineStrands(zoneId, side);                     // hedge vines hanging over the edge (foliage.js VINE_EDGES): in front of the fog
-  if (vines.length) { drawVines(g, vines, time); drawVineLip(g, vines); }
+// ---------------------------------------------------------------------------------------------
+// THE TURNING CORNER (zone 1, bottom right: east + south). Beyond a convex corner both skylines carry on, and they meet along the
+// diagonal ("mitre") of the corner square. Each strip simply carries on into the corner on its own side of the diagonal (below the east strip:
+// the east picture carried on downwards, beside the south strip: the south picture carried on to the right), so both strips continue without
+// any seam. The street has the same distance and width on both sides (ROAD_FIX), so the two roads turn into one L-shaped bend, and the
+// diagonal is a soft blend instead of a line.
+// ---------------------------------------------------------------------------------------------
+const CORNER = { zone1: ['e', 's'] };
+const BLEND = 16;                                              // half width (px) of the soft seam
+let cornerA = null, cornerB = null;
+function drawCorner(g, time) {
+  const pair = CORNER[zoneId];
+  if (!pair) return;
+  const [a, b] = pair;                                         // a = the side whose picture runs down / right on the "a" half
+  const cw = Math.min(PH, Math.ceil(skyline.over[a])), ch = Math.min(PH, Math.ceil(skyline.over[b]));
+  if (skyline.over[a] < 0.5 || skyline.over[b] < 0.5) return;
+  const W = widthPx, H = heightPx;
+  const La = layers(a), Lb = layers(b);
+  if (!La.pano || !Lb.pano) return;
+  if (!cornerA) { cornerA = mkCanvas(PH, PH); cornerB = mkCanvas(PH, PH); }
+  const paint = (cv, side, P) => {
+    const c = cv.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0); c.globalCompositeOperation = 'source-over'; c.clearRect(0, 0, PH, PH);
+    c.translate(-W, -H); c.transform(...sideMatrix(side)); c.imageSmoothingEnabled = false;
+    drawPicture(c, side, P, time);
+    return c;
+  };
+  paint(cornerA, b, Lb.pano);                                  // south picture, carried on to the right (corner-local: x = x - W, y = y - H)
+  const cb = paint(cornerB, a, La.pano);                       // east picture, carried on downwards, then masked by the diagonal
+  cb.setTransform(1, 0, 0, 1, 0, 0); cb.globalCompositeOperation = 'destination-in';
+  const mk = cb.createLinearGradient(0, BLEND, BLEND, 0);     // east picture: weight 0 where (x - y) = -BLEND ... 1 where (x - y) = +BLEND
+  mk.addColorStop(0, 'rgba(0,0,0,0)'); mk.addColorStop(1, 'rgba(0,0,0,1)');
+  cb.fillStyle = mk; cb.fillRect(0, 0, PH, PH);
+  cb.globalCompositeOperation = 'source-over';
+  g.save();
+  g.beginPath(); g.rect(W, H, cw, ch); g.clip();
+  g.imageSmoothingEnabled = false;
+  g.drawImage(cornerA, W, H);
+  g.drawImage(cornerB, W, H);
+  g.restore();
 }

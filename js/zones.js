@@ -67,13 +67,13 @@ export const ZONES = {
   zone1: {
     name: 'Rooftop Entry',
     rows: [
-    "#UqHY876SS66SS678YHYqkkkHZHUUHHRRRRRRR",
-    "#.qYH765SS55SS567HZHqkkkHYH..HH......R",
-    "j.qHH654SS44SS456HYZqkkkHHZ..HH..CCC.R",
-    "j.qZH543SS33SS345ZHHq...HHY..HH..CTC.R",
-    "#.qHY432SS22SS234HHYq...HYZ..HH..CTC.R",
-    "e.qYH321......123YHHq...HYH..HH..CCC.R",
-    "e.qqqmmm......mmmqqqq................R",
+    "#UqHYH876SS66SS678YHYqkkkZHUUHHRRRRRRR",
+    "#.qYHH765SS55SS567HZHqkkkYH..HH......R",
+    "j.qHHY654SS44SS456HYZqkkkHZ..HH..CCC.R",
+    "j.qZHH543SS33SS345ZHHq...HY..HH..CTC.R",
+    "#.qHYZ432SS22SS234HHYq...YZ..HH..CTC.R",
+    "e.qYHH321......123YHHq...YH..HH..CCC.R",
+    "e.qqqqmmm......mmmqqqq...............R",
     "#....................................R",
     "#............................HHYHYYHZ#",
     "#..c...c...c...c...c.WWWWWW.cYZHZHYHH#",
@@ -213,13 +213,13 @@ for (const x of [2, 3, 4])    ZONES.zone3.exits[x + ',17'] = { to: 'zone1', spaw
 // The right up-path in zone 1 was removed, so zone 3's right path now also arrives at the (only) left up-path
 for (const x of [25, 26, 27]) ZONES.zone3.exits[x + ',17'] = { to: 'zone1', spawn: { x: 1, y: 1 }, facing: 'down', label: 'Right path' };
 
-// Stairs: zone 3 has 20 stair tiles (x 5-24). Zone 1 has TWO railed flights (x 8-9 and x 12-13, rows 0-4).
+// Stairs: zone 3 has 20 stair tiles (x 5-24). Zone 1 has TWO railed flights (x 9-10 and x 13-14, rows 0-4).
 // The left half of zone 3's stairs (x 5-14) leads down the left flight, the right half (x 15-24) down the right flight.
 for (let x = 5; x <= 24; x++) {
   const left = x <= 14, k = left ? x - 5 : x - 15;              // k = 0..9 across that half
-  ZONES.zone3.exits[x + ',17'] = { to: 'zone1', spawn: { x: (left ? 8 : 12) + (k >= 5 ? 1 : 0), y: 1 }, facing: 'down', label: 'Stairs' };
+  ZONES.zone3.exits[x + ',17'] = { to: 'zone1', spawn: { x: (left ? 9 : 13) + (k >= 5 ? 1 : 0), y: 1 }, facing: 'down', label: 'Stairs' };
 }
-for (const fx of [8, 9, 12, 13]) {                              // top row of each flight in zone 1 -> back up to the lawn
-  const left = fx < 11, sx = (left ? 5 : 15) + (fx - (left ? 8 : 12)) * 5 + 2;
+for (const fx of [9, 10, 13, 14]) {                             // top row of each flight in zone 1 -> back up to the lawn
+  const left = fx < 12, sx = (left ? 5 : 15) + (fx - (left ? 9 : 13)) * 5 + 2;
   ZONES.zone1.exits[fx + ',0'] = { to: 'zone3', spawn: { x: sx, y: 16 }, facing: 'up', label: 'Stairs' };
 }

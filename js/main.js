@@ -1,5 +1,5 @@
 // main.js - creates everything and runs the game loop.
-import { spawn, npcSpawn, items, getExitHint, getExit, findSeat, zoneId, TILE } from './map.js';
+import { spawn, npcSpawn, items, getExitHint, getExit, findSeat, nearWaterFilter, zoneId, TILE } from './map.js';
 import { transition } from './transition.js';
 import { input } from './input.js';
 import { Player } from './player.js';
@@ -53,6 +53,7 @@ function update(dt) {
     } else {
       const seat = findSeat(p.cx, p.cy);               // near a bench? E sits down
       if (seat) p.sitDown(seat);
+      else if (nearWaterFilter(p.cx, p.cy, p.facing)) dialogue.start('You', ['You hold your cup under the tap and let the filter run...', 'Ahh. Cold, clean water. Much better!']);
       else if (skyline.canLean()) skyline.startLean(p); // touching a rail? E leans out for the full view
     }
   }
@@ -66,6 +67,7 @@ function update(dt) {
   if (!game.hint && !dialogue.active) game.hint = p.sitting ? '[E] Stand up'
     : skyline.leaning ? '[E] Stop leaning'
     : findSeat(p.cx, p.cy) ? '[E] Sit down'
+    : nearWaterFilter(p.cx, p.cy, p.facing) ? '[E] Drink water'
     : skyline.canLean() ? '[E] Lean out' : null;
 
   // Pick up the ID card by walking over it (only once the quest asks for it)

@@ -8,6 +8,7 @@ import { drawWell, wellBox, wellTiles } from './escalator.js';
 import { drawCharacter } from './sprites.js';
 import { drawGlassFront, drawGlassTops } from './glass.js';
 import { skyline, drawSkyline } from './skyline.js';
+import { setVirtualUp, UP_ROWS, WATER_FILTERS } from './map.js';
 import { getFloor } from './floor.js';
 import { paintHedge, hedgeBase, buildOverlay } from './foliage.js';
 
@@ -115,9 +116,9 @@ function railV(x, y, east, g = ctx, sh = true) {          // vertical rail segme
   g.fillStyle = RAIL.hand; g.fillRect(hx, y, 2, TILE);
   g.fillStyle = RAIL.post; g.fillRect(x, y, 7, 2); g.fillRect(x, y + TILE - 2, 7, 2);
 }
-// The two hedge beds beside the stairs (zone 1, rows 0-5: x3-4 and x17-19) sit against the semi-wall and the steps, which are solid, so they
+// The two hedge beds beside the stairs (zone 1, rows 0-5: x3-5 and x18-20) sit against the semi-wall and the steps, which are solid, so they
 // used to get no guard rail. A rail is now drawn on those faces too (same rail as every other hedge). The top edge (map edge) stays open.
-const isStairBed = (x, y) => zoneId === 'zone1' && y >= 0 && y <= 5 && ((x >= 3 && x <= 4) || (x >= 17 && x <= 19));
+const isStairBed = (x, y) => zoneId === 'zone1' && y >= 0 && y <= 5 && ((x >= 3 && x <= 5) || (x >= 18 && x <= 20));
 const isRailable = (x, y, fx, fy) => !isPlanted(x, y) && (!isSolid(x, y) || (isStairBed(fx, fy) && (getTile(x, y) === 'q' || getTile(x, y) === 'm' || isTierCh(getTile(x, y)))));   // (fx, fy) = the hedge tile asking
 function drawGuardRail(px, py, tx, ty) {
   const open = (x, y) => isRailable(x, y, tx, ty);   // floor / path next to the planted area (or the wall / steps beside a stair-side bed)
@@ -603,7 +604,7 @@ function drawFlight(px, py, tx, ty) {
 //   P_X0 / P_X1 = left / right edge of the portal (the middle tile is 32-64)     P_TOP = top edge of the portal AND of the wall piers
 //   (the wall face is as tall as the frame, so the roof gets shorter when P_TOP gets smaller)
 const P_X0 = 24, P_X1 = 72, P_TOP = 36, FRAME = 3, FLOOR_Y = 90;
-const BLOCK = { tx: 21, ty: 0 };
+const BLOCK = { tx: 22, ty: 0 };
 function drawBasementBlock(camera) {
   const bx = BLOCK.tx * TILE, by = BLOCK.ty * TILE;
   if (bx > camera.x + VW || bx + 3 * TILE < camera.x || by > camera.y + VH || by + 3 * TILE < camera.y) return;
@@ -663,6 +664,13 @@ function drawTile(ch, px, py, tx, ty, time) {
   } else if (ch === 'h') {                           // leafy dots
     ctx.fillStyle = '#1f4d25';
     ctx.fillRect(px + 6, py + 6, 6, 6); ctx.fillRect(px + 18, py + 16, 6, 6);
+  } else if (ch === '#' && zoneId === 'zone1' && tx === 0) {   // zone 1 west wall (round the glass doors): the same pale plaster as the doors and the lift wall
+    ctx.fillStyle = '#bdbab0'; ctx.fillRect(px, py, TILE, TILE);                 // the warm concrete of the stairs
+    ctx.fillStyle = '#cfccc2'; ctx.fillRect(px, py, TILE, 3);
+    ctx.fillStyle = '#a6a49c'; ctx.fillRect(px, py + TILE - 6, TILE, 6);
+    ctx.fillStyle = 'rgba(0,0,0,0.06)'; ctx.fillRect(px + 10, py, 1, TILE - 6); ctx.fillRect(px + 21, py, 1, TILE - 6);
+    const wf = WATER_FILTERS.find((f) => ty >= f.y0 && ty <= f.y1);
+    if (wf) drawWaterFilter(px, py, ty, wf);
   } else if (ch === '#') {
     ctx.fillStyle = '#44444d'; ctx.fillRect(px, py + TILE - 6, TILE, 6);
     ctx.fillStyle = 'rgba(0,0,0,0.10)'; ctx.fillRect(px + 10, py, 1, TILE - 6); ctx.fillRect(px + 21, py, 1, TILE - 6);   // board-formed concrete seams
@@ -764,6 +772,45 @@ function drawGlassDoor(ch, px, py, tx, ty) {
   ctx.restore();
 }
 
+// ---- water filters (zone 1, west wall, rows 7-9 and 21-23) -------------------------------------------------------------------
+// Copied from the photo: a 3-stage under-sink style purifier on the wall: a horizontal pre-filter on a white bracket, two white / grey
+// cartridges and a blue one, a pipe with a red valve coming down from above into a small dark junction box with loose black cables, a thin
+// white tube running from the blue cartridge down to a little chrome tap. Like the lifts / gym it is drawn as a FRONT VIEW (96 wide = the 3
+// tiles, x runs SOUTH -> NORTH, y from the top of the wall (0) down to the floor (32)) and the tile is turned a quarter turn.
+// Interaction: stand in front of it facing the wall and press E (main.js) = drink.
+function drawWaterFilter(px, py, ty, wf) {
+  ctx.save();
+  ctx.beginPath(); ctx.rect(px, py, TILE, TILE); ctx.clip();
+  ctx.translate(px + TILE / 2, py + TILE / 2); ctx.rotate(-Math.PI / 2); ctx.translate(-TILE / 2, -TILE / 2);
+  ctx.translate(-(wf.y1 - ty) * TILE, 0);                                  // this tile shows 32 px of the 96 px picture
+  const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+  ctx.translate(6, 0);                                                    // the cartridges sit a little to the north so the tap hangs clear below them
+  R(29, 12, 41, 10, 'rgba(0,0,0,0.10)');                                  // soft shadow of the whole unit on the wall
+  R(63, 0, 3, 6, '#d9dcdd'); R(65, 0, 1, 6, '#a9aeb1'); R(63, 0, 1, 6, '#f3f4f4');   // vertical pipe coming down from above
+  R(61, 2, 7, 2, '#c0392b'); R(61, 2, 7, 1, '#e2574a'); R(60, 2, 1, 2, '#7d2019'); R(68, 2, 1, 2, '#7d2019');   // red valve handle
+  R(56, 6, 13, 5, '#2b2b30'); R(57, 7, 11, 3, '#e9ebeb'); R(58, 8, 4, 1, '#9aa0a5'); R(63, 8, 3, 1, '#c0392b');   // dark junction box with a pale label
+  R(28, 6, 22, 4, '#e9ebeb'); R(28, 9, 22, 1, '#b4b9bc'); R(28, 6, 2, 4, '#c3c8ca'); R(48, 6, 2, 4, '#c3c8ca'); R(31, 7, 15, 1, '#fafafa');   // horizontal pre-filter
+  R(30, 10, 39, 2, '#f4f4f2'); R(30, 11, 39, 1, '#b8bcbf');               // white bracket plate
+  const cart = (x, w, body, lit, shade, cap) => {                         // one cartridge
+    R(x - 1, 12, w + 2, 2, cap); R(x - 1, 13, w + 2, 1, 'rgba(0,0,0,0.20)');
+    R(x, 14, w, 7, body); R(x, 14, 2, 7, lit); R(x + w - 2, 14, 2, 7, shade);
+    R(x, 20, w, 1, 'rgba(0,0,0,0.30)');
+  };
+  cart(32, 9, '#e6e8e8', '#fbfbfb', '#b3b8bb', '#dfe2e3');                // white
+  cart(43, 9, '#d2d6d7', '#eceeee', '#9fa5a8', '#dfe2e3');                // grey
+  cart(54, 11, '#2b3a9e', '#4f63d6', '#1b2570', '#dfe2e3');               // blue
+  R(46, 8, 10, 1, '#26262b'); R(55, 9, 1, 3, '#26262b');                  // cable: prefilter -> box
+  R(62, 11, 1, 3, '#26262b');                                             // cable: box -> blue cap
+  R(69, 8, 2, 1, '#26262b'); R(70, 9, 1, 8, '#26262b'); R(69, 17, 1, 8, '#26262b'); R(68, 25, 1, 2, '#26262b');   // loose cable hanging on the right
+  R(59, 21, 1, 9, '#ecebe6'); R(60, 21, 1, 9, '#b9b8b0');                 // thin white tube from the blue cartridge straight down to the tap
+  R(50, 29, 11, 1, 'rgba(0,0,0,0.18)');                                   // the tap: a chrome faucet with a lever on top ...
+  R(46, 25, 14, 3, '#c8ced2'); R(46, 25, 14, 1, '#f4f6f7'); R(46, 27, 14, 1, '#7d858b');   // horizontal stem (the tube plugs into its end)
+  R(46, 25, 3, 7, '#c8ced2'); R(47, 25, 1, 7, '#f4f6f7'); R(46, 31, 3, 1, '#6c747a');       // spout curving down: water comes out of its tip
+  R(53, 22, 4, 3, '#9aa2a8'); R(53, 22, 4, 1, '#d5dadd');                                   // lever
+  R(47, 32, 1, 1, '#8fc9f0');                                                              // a drip
+  ctx.restore();
+}
+
 // ---- gymnasium facade (J = sliding glass door, Q = poster + cabinet wall) ---------------------------------
 // Drawn as a normal front view (top of the door at the top of the tile, threshold at the bottom), then the whole tile is
 // rotated a quarter turn anticlockwise so it fits the WEST wall of a top-down map: door top -> wall side, threshold -> mat side.
@@ -771,7 +818,8 @@ function drawGymWall(ch, px, py, tx, ty) {
   ctx.save();
   ctx.beginPath(); ctx.rect(px, py, TILE, TILE); ctx.clip();
   ctx.translate(px + TILE / 2, py + TILE / 2); ctx.rotate(-Math.PI / 2); ctx.translate(-TILE / 2, -TILE / 2);   // now draw in 0..32 local coords
-  ctx.fillStyle = '#6b6b72'; ctx.fillRect(0, 0, TILE, TILE);                         // lighter concrete than the plain wall
+  ctx.fillStyle = '#bdbab0'; ctx.fillRect(0, 0, TILE, TILE);                         // the warm concrete of the stairs
+  ctx.fillStyle = '#cfccc2'; ctx.fillRect(0, 0, TILE, 3);
   ctx.fillStyle = 'rgba(0,0,0,0.10)'; ctx.fillRect(10, 0, 1, TILE); ctx.fillRect(21, 0, 1, TILE);   // board-formed seams
   if (ch === 'J') {
     const open = ty > 24;                                                           // the second door is slid slightly open
@@ -787,7 +835,7 @@ function drawGymWall(ch, px, py, tx, ty) {
     ctx.fillStyle = '#1b1b22'; ctx.fillRect(13, 12, 2, 7);                          // handle
     ctx.fillStyle = '#e0a82e'; ctx.fillRect(2, 27, TILE - 4, 4);                    // yellow threshold strip (bottom)
   } else {
-    ctx.fillStyle = '#44444d'; ctx.fillRect(0, TILE - 6, TILE, 6);                  // wall base shadow (like '#')
+    ctx.fillStyle = '#a6a49c'; ctx.fillRect(0, TILE - 6, TILE, 6);                  // wall base (like the west wall)
     ctx.fillStyle = '#f1f1ee'; ctx.fillRect(9, 3, 13, 15);                          // usage-rules poster
     ctx.fillStyle = '#2a2a30'; ctx.fillRect(9, 3, 13, 4);                           // poster header
     ctx.fillStyle = '#d32f2f'; ctx.fillRect(18, 3, 4, 2);
@@ -866,6 +914,31 @@ function drawLabel(text, x, y) {
   ctx.font = '14px monospace'; ctx.fillStyle = '#fff'; ctx.fillText(text, x, y);
 }
 
+// ---- zone 1: the upper zone above the top edge ---------------------------------------------------------------------------
+// A grass lawn with the hedge beds carrying on upwards (same tiles, guard rails and semi-walls as below the edge, see map.js upperTile),
+// fading into black well before the end: nothing up there can be reached yet. The skyline window on the right (x 31-37) is not touched.
+const LAWN_X1 = 31 * TILE;                           // lawn / hedges end where the north skyline window starts
+const LAWN_FADE = [[0, 0], [0.22, 0.30], [0.5, 0.78], [0.72, 0.96], [1, 1]];   // [depth 0..1 of the fade, black opacity]
+const LAWN_FADE_PX = 150;                            // px above the edge until it is fully black
+function drawUpperLawn(time) {
+  if (skyline.over.n < 0.5 || camera.y >= 0) return;
+  const tx0 = Math.max(0, Math.floor(camera.x / TILE)), tx1 = Math.min(LAWN_X1 / TILE - 1, Math.floor((camera.x + VW) / TILE));
+  if (tx1 < tx0) return;
+  const ty0 = Math.max(-UP_ROWS, Math.floor(camera.y / TILE));
+  setVirtualUp(true);
+  for (let ty = ty0; ty <= -1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+    const ch = getTile(tx, ty);
+    if (ch === '.') ctx.drawImage(getFloor(zoneId, cols, rows), tx * TILE, (7 + ((-ty - 1) % 2)) * TILE, TILE, TILE, tx * TILE, ty * TILE, TILE, TILE);   // plain paving: the same slabs as rows 7-8
+    else drawTile(ch, tx * TILE, ty * TILE, tx, ty, time);
+  }
+  setVirtualUp(false);
+  const gx0 = tx0 * TILE, gw = (tx1 + 1) * TILE - gx0, top = ty0 * TILE;
+  const fg = ctx.createLinearGradient(0, 0, 0, -LAWN_FADE_PX);
+  for (const [t, a] of LAWN_FADE) fg.addColorStop(t, `rgba(0,0,0,${a})`);
+  ctx.fillStyle = fg; ctx.fillRect(gx0, -LAWN_FADE_PX, gw, LAWN_FADE_PX);
+  if (top < -LAWN_FADE_PX) { ctx.fillStyle = '#000'; ctx.fillRect(gx0, top, gw, -LAWN_FADE_PX - top); }
+}
+
 export function render(game, time) {
   const { player, npc, debug } = game;
   updateCamera(player);
@@ -873,6 +946,7 @@ export function render(game, time) {
   ctx.save();
   ctx.translate(-camera.x, -camera.y);               // everything below is in WORLD pixels
   drawSkyline(ctx, camera, VW, VH, time);            // the city beyond the rails (before the tiles, so the rail slats are see-through)
+  if (zoneId === 'zone1') drawUpperLawn(time);       // the lawn of the upper zone above the top edge (only while the camera is up there)
 
   // Only draw tiles that are on screen (cheap "culling"); max/min keep us inside the map when the camera slides past an edge
   const x0 = Math.max(0, Math.floor(camera.x / TILE)), x1 = Math.min(cols - 1, Math.floor((camera.x + VW) / TILE));

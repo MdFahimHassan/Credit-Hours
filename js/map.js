@@ -4,6 +4,9 @@
 import { ZONES } from './zones.js';
 export const TILE = 32;
 
+export const UP_ROWS = 11;                  // see upperTile() below
+let virtualUp = false;
+export const setVirtualUp = (v) => { virtualUp = v; };
 export let zoneId = 'zone1';                 // which zone is loaded right now
 export let cols = 0, rows = 0, widthPx = 0, heightPx = 0;
 export const grid = [];                      // grid[y][x] = a single tile character
@@ -41,7 +44,23 @@ export function loadZone(id) {
 }
 loadZone('zone1');                           // the game starts in zone 1
 
+// ---- zone 1: the lawn above the top edge --------------------------------------------------------------------------
+// The upper zone is a full grass lawn. It is NOT part of the map (nothing there is walkable or solid); renderer.js paints it, only while
+// the camera slides above the top edge, by switching `virtualUp` on and drawing the rows -1 ... -UP_ROWS with the normal tile code.
+// Which tile goes where: the hedge beds and the low semi-walls round them simply carry on upwards, everything else is lawn.
+const UP_HEDGES = [25, 26, 29, 30];                         // columns of row 0..5 that hold a hedge bed which carries on upwards: the two beds beside the lane (the stair-side beds end at the stairs)
+function upperTile(tx, ty) {
+  const r = (-ty - 1) % 6;                                    // reuse the look of rows 0-5 so the beds do not repeat obviously
+  if (tx >= 31) return '#';                                   // the north skyline window (31-37) is drawn by skyline.js
+  if (tx === 0) return '#';                                   // the west wall (cream, see renderer.js) carries on up
+  if (tx === 2 || tx === 21) return 'q';                      // the 1-tile semi-wall borders of the stair-side hedge beds go on to the top (the hedges themselves end at the stairs)
+  if (UP_HEDGES.includes(tx)) return grid[r][tx];
+  if (tx === 1 || (tx >= 22 && tx <= 24) || tx === 27 || tx === 28) return '.';   // normal stone paving: the up-path (x1), behind the storage room, the lane
+  return 'g';                                                 // everything else: lawn (the hedges beside the stairs end at the stairs)
+}
+
 export function getTile(tx, ty) {
+  if (virtualUp && ty < 0 && ty >= -UP_ROWS && tx >= 0 && tx < cols && zoneId === 'zone1') return upperTile(tx, ty);
   if (tx < 0 || ty < 0 || tx >= cols || ty >= rows) return '#'; // outside = wall
   return grid[ty][tx];
 }
@@ -86,6 +105,12 @@ export function solidRectsAt(x, y, w, h) {
 
 // Does a pixel-space box overlap anything solid? (the core of AABB collision)
 export const boxHitsSolid = (x, y, w, h) => solidRectsAt(x, y, w, h).length > 0;
+
+// The two water filters on the west wall of zone 1 (wall tiles x0, rows 7-9 and 21-23; drawn by renderer.js drawWaterFilter). You can drink
+// from one when you stand right in front of it, facing the wall.
+export const WATER_FILTERS = [{ y0: 7, y1: 9 }, { y0: 21, y1: 23 }];
+export const nearWaterFilter = (cx, cy, facing) => zoneId === 'zone1' && facing === 'left' && cx < 2 * TILE
+  && WATER_FILTERS.some((f) => cy >= f.y0 * TILE && cy < (f.y1 + 1) * TILE);
 
 // Is this tile one of the stair flights the player can walk on (zone 1's railed flights)?
 export const isStairs = (tx, ty) => zoneId === 'zone1' && getTile(tx, ty) === 'S';
