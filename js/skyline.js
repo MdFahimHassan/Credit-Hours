@@ -54,14 +54,14 @@ const EO = PH / Z;            // depth of the painting in its own (zoomed) units
 //   WINDOW_FILL tile ranges that show the skyline although they have no rail (zone 1: the wall behind the east hedge bed)
 //   WALL_STYLE  'concrete' (default) or 'terrace' (the wall of the level above, with planters and vines)
 // ---------------------------------------------------------------------------------------------
-const SKIP = { zone1: ['w'], zone2: ['n', 's'] };   // zone 2: the corner rail tiles (0,0) / (0,29) belong to the west skyline only
+const SKIP = { zone1: ['w'], zone2: ['n'] };   // zone 2: the north wall has no skyline (its corner rail tile (0,0) belongs to the west skyline only)
 const WINDOW_FILL = { zone1: { e: [[8, 21]] }, zone2: { w: [[8, 21]] } };   // zone 2: the wall behind the west hedge bed
 const WALL_STYLE = { zone1: { n: 'terrace' } };
 const wallStyle = (zid, side) => WALL_STYLE[zid]?.[side] ?? 'concrete';
 // EXTEND: the skyline of this side carries on past the START of the edge (u < 0) instead of ending in a cream-wall corner.
 //   zone 1: the east skyline runs on up past the top-right corner, the south skyline runs on left past the bottom-left corner.
 //   It also carries on past the END of the edge, so the bottom-right corner (east + south) can turn smoothly (see drawCorner).
-const EXTEND = { zone1: { e: true, s: true }, zone2: { w: true } };   // zone 2: the west skyline runs the full height and on past both corners
+const EXTEND = { zone1: { e: true, s: true }, zone2: { w: true, s: true } };   // zone 2: the west skyline runs the full height and on past the top corner; west + south meet in a turning corner (CORNER)
 const EXT = 480;                // how far (px) the skyline carries on past the corner (the camera can never show more than PH = 320)
 // STAIRS_DARK: flights of stairs on these zones do NOT show steps / rails / extra view beyond the edge: the stairs lead straight
 // up to the next level (zone 1: the lawn, painted by renderer.js). The camera does not slide out for them either.
@@ -74,9 +74,9 @@ const DNEG = 240;
 // OPEN_END: this side's window has no concrete pier at its far end (its picture goes on round the corner)
 const OPEN_END = { zone1: ['n'] };
 // LINK: sides whose skylines are one picture round a corner: they share the same fog clearness so no seam shows
-const LINK = { zone1: ['n', 'e', 's'] };
+const LINK = { zone1: ['n', 'e', 's'], zone2: ['w', 's'] };
 // ROAD_FIX: the street round the corner must have the same distance / width on both sides so the two roads meet in a clean mitre
-const ROAD_FIX = { zone1: { e: { d: 46, h: 12 }, s: { d: 46, h: 12 } } };
+const ROAD_FIX = { zone1: { e: { d: 46, h: 12 }, s: { d: 46, h: 12 } }, zone2: { w: { d: 46, h: 12, speed: 18, cars: 1.2 }, s: { d: 46, h: 12 } } };
 
 // ---------------------------------------------------------------------------------------------
 // Which parts of the edges are rails (skyline windows) and which are exits (paths / stairs). Cached per zone.
@@ -738,10 +738,11 @@ function drawSide(g, side, time) {
   const over = Math.min(PH, Math.ceil(skyline.over[side])), len = F.len, ext = F.ext;
   g.save();
   g.beginPath();                                               // only the strip beyond this edge; a side with an extension also covers the corner at its start (see EXTEND)
+  const sw = CORNER[zoneId]?.corner === 'sw';                   // zone 2: the south-west corner square is drawn by drawCorner
   if (side === 'e') g.rect(W, -ext, over, H + ext);            // (the corner at the END of e / s is drawn by drawCorner, as one turning picture)
-  else if (side === 'w') g.rect(-over, -ext, over, H + 2 * ext);   // (ext = 0 where the west side has no extension: zone 1)
+  else if (side === 'w') g.rect(-over, -ext, over, H + (sw ? ext : 2 * ext));   // (ext = 0 where the west side has no extension: zone 1)
   else if (side === 'n') g.rect(0, -over, W, over);
-  else g.rect(-ext, H, W + ext, over);
+  else g.rect(sw ? 0 : -ext, H, W + (sw ? 0 : ext), over);
   g.clip();
   g.transform(...sideMatrix(side));
   g.imageSmoothingEnabled = false;
@@ -844,37 +845,38 @@ function drawPicture(g, side, P, time) {
 // any seam. The street has the same distance and width on both sides (ROAD_FIX), so the two roads turn into one L-shaped bend, and the
 // diagonal is a soft blend instead of a line.
 // ---------------------------------------------------------------------------------------------
-const CORNER = { zone1: ['e', 's'] };
+const CORNER = { zone1: { a: 'e', b: 's', corner: 'se' }, zone2: { a: 'w', b: 's', corner: 'sw' } };   // a = the side carried on downwards, b = the south side carried on sideways
 const BLEND = 16;                                              // half width (px) of the soft seam
 let cornerA = null, cornerB = null;
 function drawCorner(g, time) {
-  const pair = CORNER[zoneId];
-  if (!pair) return;
-  const [a, b] = pair;                                         // a = the side whose picture runs down / right on the "a" half
+  const cfg = CORNER[zoneId];
+  if (!cfg) return;
+  const { a, b, corner } = cfg, west = corner === 'sw';
   const cw = Math.min(PH, Math.ceil(skyline.over[a])), ch = Math.min(PH, Math.ceil(skyline.over[b]));
   if (skyline.over[a] < 0.5 || skyline.over[b] < 0.5) return;
-  const W = widthPx, H = heightPx;
+  const W = widthPx, H = heightPx, ox = west ? 0 : W;          // (ox, H) = the corner point of the map
   const La = layers(a), Lb = layers(b);
   if (!La.pano || !Lb.pano) return;
   if (!cornerA) { cornerA = mkCanvas(PH, PH); cornerB = mkCanvas(PH, PH); }
   const paint = (cv, side, P) => {
     const c = cv.getContext('2d');
     c.setTransform(1, 0, 0, 1, 0, 0); c.globalCompositeOperation = 'source-over'; c.clearRect(0, 0, PH, PH);
-    c.translate(-W, -H); c.transform(...sideMatrix(side)); c.imageSmoothingEnabled = false;
+    c.translate(west ? PH : -W, -H); c.transform(...sideMatrix(side)); c.imageSmoothingEnabled = false;   // corner-local: x = x - W (se) / x + PH (sw), y = y - H
     drawPicture(c, side, P, time);
     return c;
   };
-  paint(cornerA, b, Lb.pano);                                  // south picture, carried on to the right (corner-local: x = x - W, y = y - H)
-  const cb = paint(cornerB, a, La.pano);                       // east picture, carried on downwards, then masked by the diagonal
+  paint(cornerA, b, Lb.pano);                                  // south picture, carried on sideways
+  const cb = paint(cornerB, a, La.pano);                       // east / west picture, carried on downwards, then masked by the diagonal
   cb.setTransform(1, 0, 0, 1, 0, 0); cb.globalCompositeOperation = 'destination-in';
-  const mk = cb.createLinearGradient(0, BLEND, BLEND, 0);     // east picture: weight 0 where (x - y) = -BLEND ... 1 where (x - y) = +BLEND
+  const mk = west ? cb.createLinearGradient(PH + BLEND / 2, BLEND / 2, PH - BLEND / 2, -BLEND / 2)   // west picture: weight 1 on the west side of the diagonal
+                  : cb.createLinearGradient(0, BLEND, BLEND, 0);                                      // east picture: weight 0 where (x - y) = -BLEND ... 1 where (x - y) = +BLEND
   mk.addColorStop(0, 'rgba(0,0,0,0)'); mk.addColorStop(1, 'rgba(0,0,0,1)');
   cb.fillStyle = mk; cb.fillRect(0, 0, PH, PH);
   cb.globalCompositeOperation = 'source-over';
   g.save();
-  g.beginPath(); g.rect(W, H, cw, ch); g.clip();
+  g.beginPath(); g.rect(west ? -cw : W, H, cw, ch); g.clip();
   g.imageSmoothingEnabled = false;
-  g.drawImage(cornerA, W, H);
-  g.drawImage(cornerB, W, H);
+  g.drawImage(cornerA, west ? -PH : W, H);
+  g.drawImage(cornerB, west ? -PH : W, H);
   g.restore();
 }

@@ -132,15 +132,24 @@ export function findSeat(cx, cy) {
   }
   return best;
 }
-// Head clearance: the sprite is ~17px taller than the collision box, so walking up to a plaster wall used to put the head on the wall.
-// Walls in HEAD_WALLS keep the head off them: the player stops HEAD px short. (Skipped where there is no room, e.g. a 1-tile path under a wall.)
-export const HEAD = 14;
-const HEAD_WALLS = '#MGDKJQ';
+// Head / foot clearance: the sprite is ~17px taller than the collision box above it and its shoes stick out ~5px below it, so walking up to a
+// wall, hedge, bench or the pool rim used to put the head or the feet on it. Solid tiles (see clearsPlayer) keep both off them: the player stops HEAD / FOOT px short. (Skipped where there is no room, e.g. a 1-tile path under a wall.)
+export const HEAD = 17;                                   // the head reaches ~17px above the hitbox
+export const FOOT = 5;                                    // the shoes reach ~5px below the hitbox
+const clearsPlayer = (tx, ty) => { const c = getTile(tx, ty); return c !== 'R' && isSolid(tx, ty); };   // every solid tile (walls, hedges and their rails, benches, the pool rim...) except the edge railings
 export function headWallBottom(x, y, w) {                // lowest pixel edge of a wall tile that the strip above the hitbox overlaps, or null
   const x0 = Math.floor(x / TILE), x1 = Math.floor((x + w - 0.01) / TILE);
   const y0 = Math.floor((y - HEAD) / TILE), y1 = Math.floor((y - 0.01) / TILE);
   let best = null;
   for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++)
-    if (HEAD_WALLS.includes(getTile(tx, ty))) best = Math.max(best ?? -Infinity, (ty + 1) * TILE);
+    if (clearsPlayer(tx, ty)) best = Math.max(best ?? -Infinity, (ty + 1) * TILE);
+  return best;
+}
+export function footWallTop(x, y, w, h) {               // top pixel edge of the highest wall tile that the strip below the hitbox overlaps, or null
+  const x0 = Math.floor(x / TILE), x1 = Math.floor((x + w - 0.01) / TILE);
+  const y0 = Math.floor((y + h) / TILE), y1 = Math.floor((y + h + FOOT - 0.01) / TILE);
+  let best = null;
+  for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++)
+    if (clearsPlayer(tx, ty)) best = Math.min(best ?? Infinity, ty * TILE);
   return best;
 }

@@ -1,5 +1,5 @@
 // player.js - position, movement, and X/Y-separated collision.
-import { TILE, HEAD, boxHitsSolid, solidRectsAt, isStairs, headWallBottom } from './map.js';
+import { TILE, HEAD, FOOT, boxHitsSolid, solidRectsAt, isStairs, headWallBottom, footWallTop } from './map.js';
 import { input } from './input.js';
 
 const STAIR_SPEED = 0.85;   // walking speed on the stairs (1 = same as flat ground)
@@ -66,9 +66,18 @@ export class Player {
       else if (dy < 0) this.y = Math.max(...hit.map((r) => r.y + r.h));
     }
 
-    // --- head clearance: keep the head off the plaster walls above (only if the player still fits below) ---
+    // --- head and foot clearance: keep the head and the shoes off the plaster walls above / below (only if the player still fits) ---
+    // (each push only happens if the player then still has room on the other side too, so a 1-tile gap never traps or blocks him)
     const wallBottom = headWallBottom(this.x, this.y, this.w);
-    if (wallBottom !== null && this.y < wallBottom + HEAD && !boxHitsSolid(this.x, wallBottom + HEAD, this.w, this.h)) this.y = wallBottom + HEAD;
+    if (wallBottom !== null && this.y < wallBottom + HEAD) {
+      const ny = wallBottom + HEAD, ft = footWallTop(this.x, ny, this.w, this.h);
+      if (!boxHitsSolid(this.x, ny, this.w, this.h) && (ft === null || ny + this.h <= ft - FOOT)) this.y = ny;
+    }
+    const wallTop = footWallTop(this.x, this.y, this.w, this.h);
+    if (wallTop !== null && this.y + this.h > wallTop - FOOT) {
+      const ny = wallTop - FOOT - this.h, hb = headWallBottom(this.x, ny, this.w);
+      if (!boxHitsSolid(this.x, ny, this.w, this.h) && (hb === null || ny >= hb + HEAD)) this.y = ny;
+    }
 
     // walking animation only plays if we actually moved (not when pushing against a wall)
     const moved = Math.hypot(this.x - ox, this.y - oy);
