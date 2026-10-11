@@ -1,10 +1,11 @@
 // main.js - creates everything and runs the game loop.
-import { spawn, npcSpawn, items, getExitHint, getExit, findSeat, nearWaterFilter, zoneId, TILE } from './map.js';
+import { spawn, npcSpawn, items, getExitHint, getExit, findSeat, nearWaterFilter, nearRestroom, zoneId, TILE } from './map.js';
 import { transition } from './transition.js';
 import { input } from './input.js';
 import { Player } from './player.js';
 import { NPC } from './npc.js';
 import { dialogue } from './dialogue.js';
+import { restroom } from './restroom.js';
 import { quest } from './quest.js';
 import { render } from './renderer.js';
 import { intro } from './intro.js';
@@ -33,6 +34,9 @@ function update(dt) {
   // Zone change: the fade runs, player can't move
   if (transition.active) { transition.update(dt, game.player); game.hint = null; return; }
 
+  // Restroom visit: fade, text, fade back. The player can't move meanwhile.
+  if (restroom.active) { restroom.update(dt, input, game.player); game.hint = null; return; }
+
   const npcHere = game.npc.zone === zoneId;          // the NPC lives in zone 1 only
 
   const p = game.player;
@@ -53,6 +57,7 @@ function update(dt) {
     } else {
       const seat = findSeat(p.cx, p.cy);               // near a bench? E sits down
       if (seat) p.sitDown(seat);
+      else if (nearRestroom(p.cx, p.cy, p.facing)) restroom.start(nearRestroom(p.cx, p.cy, p.facing));   // men's: use it, women's: denied
       else if (nearWaterFilter(p.cx, p.cy, p.facing)) dialogue.start('You', ['You hold your cup under the tap and let the filter run...', 'Ahh. Cold, clean water. Much better!']);
       else if (skyline.canLean()) skyline.startLean(p); // touching a rail? E leans out for the full view
     }
@@ -67,6 +72,7 @@ function update(dt) {
   if (!game.hint && !dialogue.active) game.hint = p.sitting ? '[E] Stand up'
     : skyline.leaning ? '[E] Stop leaning'
     : findSeat(p.cx, p.cy) ? '[E] Sit down'
+    : nearRestroom(p.cx, p.cy, p.facing) ? '[E] Use restroom'
     : nearWaterFilter(p.cx, p.cy, p.facing) ? '[E] Drink water'
     : skyline.canLean() ? '[E] Lean out' : null;
 

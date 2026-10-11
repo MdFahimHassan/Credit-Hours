@@ -112,6 +112,20 @@ export const WATER_FILTERS = [{ y0: 7, y1: 9 }, { y0: 21, y1: 23 }];
 export const nearWaterFilter = (cx, cy, facing) => zoneId === 'zone1' && facing === 'left' && cx < 2 * TILE
   && WATER_FILTERS.some((f) => cy >= f.y0 * TILE && cy < (f.y1 + 1) * TILE);
 
+// Restroom doors of zone 2 (M = men's, north block, doors face south | G = women's, south block, doors face north; drawn by renderer.js
+// drawRestroomDoor). Stand in front of the doors, facing them, and press E. Returns 'men' | 'women' | null.
+export function nearRestroom(cx, cy, facing) {
+  if (zoneId !== 'zone2') return null;
+  const dy = facing === 'up' ? -44 : facing === 'down' ? 44 : 0;      // look 44px ahead of the player's centre
+  if (!dy) return null;
+  for (const dx of [0, -8, 8]) {                                       // a little sideways slack so you need not be perfectly centred
+    const c = getTile(Math.floor((cx + dx) / TILE), Math.floor((cy + dy) / TILE));
+    if (c === 'M') return 'men';
+    if (c === 'G') return 'women';
+  }
+  return null;
+}
+
 // Is this tile one of the stair flights the player can walk on (zone 1's railed flights)?
 export const isStairs = (tx, ty) => zoneId === 'zone1' && getTile(tx, ty) === 'S';
 // Nearest bench tile ('C') close enough to sit on, or null. `facing` = the open side of the bench, i.e. the way a

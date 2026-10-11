@@ -30,6 +30,8 @@
 //   g  grass (walkable lawn)   K  storage room block (solid)   S on the bottom row = stairs down to zone 1
 // New in zone 2:
 //   B  pool rim (solid)    ~  water (solid)        M  men's restroom door (solid)   G  women's restroom door (solid)
+//      Each restroom is a PAIR of tiles: the left tile is the slatted steel gate, the right tile is the doorway (drawRestroomDoor in renderer.js).
+//      The signs, lamp, mop bucket, plant and louvres are painted on the plaster tiles beside the pair. Press E in front of them: see restroom.js
 //
 // exits: key is "x,y" of the exit tile.
 //   to      = zone to fade into        spawn  = tile where the player appears there (NOT an exit tile!)

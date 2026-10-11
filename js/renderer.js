@@ -3,6 +3,7 @@ import { TILE, cols, rows, widthPx, heightPx, getTile, isSolid, items, zoneId } 
 import { transition } from './transition.js';
 import { quest } from './quest.js';
 import { dialogue } from './dialogue.js';
+import { restroom } from './restroom.js';
 import { intro } from './intro.js';
 import { drawWell, wellBox, wellTiles } from './escalator.js';
 import { drawCharacter } from './sprites.js';
@@ -668,6 +669,7 @@ function drawTile(ch, px, py, tx, ty, time) {
     ctx.fillStyle = 'rgba(0,0,0,0.06)'; ctx.fillRect(px + 10, py, 1, TILE - 6); ctx.fillRect(px + 21, py, 1, TILE - 6);
     const wf = zoneId === 'zone1' && WATER_FILTERS.find((f) => ty >= f.y0 && ty <= f.y1);
     if (wf) drawWaterFilter(px, py, ty, wf);
+    if (zoneId === 'zone2') drawRestroomWall(px, py, tx, ty);   // signs / lamp / bucket / louvers beside the restroom doors
   } else if (ch === '#') {
     ctx.fillStyle = '#44444d'; ctx.fillRect(px, py + TILE - 6, TILE, 6);
     ctx.fillStyle = 'rgba(0,0,0,0.10)'; ctx.fillRect(px + 10, py, 1, TILE - 6); ctx.fillRect(px + 21, py, 1, TILE - 6);   // board-formed concrete seams
@@ -687,11 +689,8 @@ function drawTile(ch, px, py, tx, ty, time) {
     drawGlassDoor(ch, px, py, tx, ty);
   } else if (ch === 'J' || ch === 'Q') {              // gym facade (west wall, faces east)
     drawGymWall(ch, px, py, tx, ty);
-  } else if (ch === 'M' || ch === 'G') {              // restroom door with a sign: M = men, W = women
-    ctx.fillStyle = '#44444d'; ctx.fillRect(px, py + TILE - 6, TILE, 6);
-    ctx.fillStyle = ch === 'M' ? '#2f6fb5' : '#c2548c'; ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 3);
-    ctx.strokeStyle = '#1b1b22'; ctx.lineWidth = 1; ctx.strokeRect(px + 3.5, py + 3.5, TILE - 7, TILE - 4);
-    ctx.font = 'bold 15px monospace'; ctx.fillStyle = '#fff'; ctx.fillText(ch === 'M' ? 'M' : 'W', px + 11, py + 22);
+  } else if (ch === 'M' || ch === 'G') {              // restroom doors (see drawRestroomDoor)
+    drawRestroomDoor(ch, px, py, tx, ty);
   } else if (ch === 'g') {                            // grass: a few darker tufts
     if ((tx * 7 + ty * 13) % 4 === 0) {
       ctx.fillStyle = 'rgba(0,0,0,0.10)';
@@ -766,6 +765,145 @@ function drawGlassDoor(ch, px, py, tx, ty) {
   if (ch === 'e') { R(30, 13, 1, 7, '#1b1b22'); R(33, 13, 1, 7, '#1b1b22'); }   // handles either side of the meeting stile
   else { R(20, 14, 1, 6, '#1b1b22'); R(23, 14, 1, 6, '#1b1b22'); }
   R(2, 27, 60, 2, '#3a3d42');                                      // threshold
+  ctx.restore();
+}
+
+// ---- restroom doors (zone 2: M M = men's, north block | G G = women's, south block) ----------------------------------------------
+// Copied from the two photos. Each restroom has TWO openings side by side (left tile = a black slatted steel gate, right tile = the
+// real doorway) with a small blue sign on the wall beside them (and a little blue lamp above it).
+//   men's   : sign | gate | doorway with a dark door leaf swung open on its left | sign + lamp + light switch. A yellow mop bucket
+//             with a mop leans against the wall at the far left (x23, row 5).
+//   women's : (sign + lamp on BOTH sides, like the men's) a band of louvres runs above everything | gate (sunlit bars on a dark background) | doorway with a cream door leaf
+//             swung open, a warm light at the top, a red/white "no smoking" sign on the inner door | sign + lamp + a monstera plant (x25).
+// Interaction: stand in front facing the doors and press E (main.js -> restroom.js). Drawing of the fade / text card: drawRestroomScene().
+function plaster(px, py) {                          // the pale plaster every wall of zone 2 has (same fills as the '#' branch)
+  ctx.fillStyle = '#bdbab0'; ctx.fillRect(px, py, TILE, TILE);
+  ctx.fillStyle = '#cfccc2'; ctx.fillRect(px, py, TILE, 3);
+  ctx.fillStyle = '#a6a49c'; ctx.fillRect(px, py + TILE - 6, TILE, 6);
+  ctx.fillStyle = 'rgba(0,0,0,0.06)'; ctx.fillRect(px + 10, py, 1, TILE - 6); ctx.fillRect(px + 21, py, 1, TILE - 6);
+}
+
+// Blue restroom sign with a white pictogram, built from a 7x9 pixel grid. cell = pixels per grid cell (1 on the wall, 4 on the text card).
+const SIGN_ICON = {
+  men:   ['..###..', '..###..', '.#####.', '#.###.#', '..###..', '..###..', '..#.#..', '..#.#..', '..#.#..'],
+  women: ['..###..', '..###..', '...#...', '..###..', '.#####.', '#######', '..#.#..', '..#.#..', '..#.#..'],
+};
+function drawSign(x, y, cell, kind) {
+  ctx.fillStyle = '#143f78'; ctx.fillRect(x, y, 9 * cell, 11 * cell);                         // dark edge
+  ctx.fillStyle = '#2573cf'; ctx.fillRect(x + cell, y + cell, 7 * cell, 9 * cell);            // blue face
+  ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(x + cell, y + cell, 7 * cell, cell);   // light catching the top edge
+  ctx.fillStyle = '#f4f7fb';
+  SIGN_ICON[kind].forEach((row, r) => { for (let c = 0; c < 7; c++) if (row[c] === '#') ctx.fillRect(x + (1 + c) * cell, y + (1 + r) * cell, cell, cell); });
+}
+function drawLamp(x, y) {                           // the small blue light / sensor box above the sign
+  ctx.fillStyle = '#143f78'; ctx.fillRect(x, y, 5, 4);
+  ctx.fillStyle = '#3b86e0'; ctx.fillRect(x + 1, y + 1, 3, 2);
+  ctx.fillStyle = '#c4defa'; ctx.fillRect(x + 1, y + 1, 1, 1);
+}
+
+function drawLouvres(px, py) {                      // the horizontal vent band above the women's doors
+  ctx.fillStyle = '#4c4a46'; ctx.fillRect(px, py + 1, TILE, 7);
+  ctx.fillStyle = '#a3a096'; for (let y = 1; y < 8; y += 2) ctx.fillRect(px, py + y, TILE, 1);
+  ctx.fillStyle = '#8c897f'; ctx.fillRect(px, py + 8, TILE, 1);
+}
+
+// wall tiles beside the doors: called from the '#' branch of drawTile (after the plaster is painted)
+function drawRestroomWall(px, py, tx, ty) {
+  const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(px + x, py + y, w, h); };
+  const right = getTile(tx + 1, ty), left = getTile(tx - 1, ty);
+  if (right === 'M') {                              // men's: wall just left of the gate -> sign, mop bucket and mop
+    drawSign(px + 20, py + 8, 1, 'men');
+    ctx.strokeStyle = '#d3cdb9'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px + 10.5, py + 20); ctx.lineTo(px + 5.5, py + 5); ctx.stroke();   // mop handle leaning on the wall
+    R(3, 24, 9, 1, '#26262b'); R(4, 25, 7, 5, '#e2b81c'); R(4, 25, 7, 1, '#f5da63'); R(10, 25, 1, 5, '#b48d0e'); R(4, 29, 7, 1, '#8a6a08');   // yellow bucket
+    R(3, 22, 9, 2, '#3b3b40'); R(5, 21, 1, 2, '#6a6a70'); R(9, 21, 1, 2, '#6a6a70');                                                         // wringer on top
+  } else if (left === 'M') {                        // men's: wall right of the doorway -> lamp, sign and switch
+    drawLamp(px + 6, py + 4); drawSign(px + 4, py + 9, 1, 'men');
+    R(19, 17, 4, 6, '#e9e9e3'); R(19, 17, 4, 1, '#ffffff'); R(20, 19, 2, 2, '#9ba0a3');
+  } else if (right === 'G' || left === 'G') {       // women's: louvres run across the whole wall above the openings
+    drawLouvres(px, py);
+    if (right === 'G') { drawLamp(px + 22, py + 10); drawSign(px + 20, py + 15, 1, 'women'); }   // wall left of the gate: lamp + sign (same as the men's, signs on BOTH sides)
+    if (left === 'G') {                             // wall right of the open door: lamp, sign, plant and a mop
+      drawLamp(px + 6, py + 10); drawSign(px + 4, py + 15, 1, 'women');
+      ctx.strokeStyle = '#8f8467'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px + 30.5, py + 11); ctx.lineTo(px + 28.5, py + 26); ctx.stroke();   // mop
+      R(18, 25, 8, 5, '#6d6d72'); R(18, 25, 8, 1, '#8c8c92');                                   // grey planter
+      ctx.fillStyle = '#2f6b32';                                                                // monstera leaves
+      for (const [lx, ly, rw, rh, rot] of [[19, 21, 4.5, 3, -0.7], [24, 20, 4.5, 3, 0.5], [21.5, 16, 3.5, 5, 0], [26, 24, 3.5, 2.2, 0.9]]) {
+        ctx.beginPath(); ctx.ellipse(px + lx, py + ly, rw, rh, rot, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = '#4f9d42'; ctx.fillRect(px + 20, py + 14, 2, 3); ctx.fillRect(px + 17, py + 20, 3, 1); ctx.fillRect(px + 23, py + 19, 3, 1);   // lit leaf edges
+      ctx.fillStyle = '#1d4a20'; ctx.fillRect(px + 21, py + 17, 1, 8);                          // stem
+    }
+  }
+}
+
+// door tiles: the left tile of each pair is the slatted gate, the right tile is the real doorway
+function drawRestroomDoor(ch, px, py, tx, ty) {
+  const men = ch === 'M', gate = getTile(tx - 1, ty) !== ch;
+  const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(px + x, py + y, w, h); };
+  plaster(px, py);
+  if (!men) drawLouvres(px, py);
+  const ox = 5, ow = 22, top = men ? 5 : 11, h = TILE - top, mid = top + Math.round(h * 0.45);   // the opening goes right down to the floor
+  R(ox - 1, top - 1, ow + 2, h + 1, '#8a877d');                       // concrete reveal around the opening
+  if (gate) {
+    // steel gate: black vertical bars. Men's: dim grey light behind. Women's: warm sunlight at the top, bars catching the sun on a dark background
+    R(ox, top, ow, h, men ? '#55534e' : '#18171b');
+    R(ox, top, ow, 3, men ? '#d6d0bd' : '#e5a566');                   // light coming through at the top
+    for (let x = ox + 1; x < ox + ow - 1; x += 3) { R(x, top, 1, h, men ? '#1a1a1d' : '#b9a78a'); if (!men) R(x + 1, top + 3, 1, h - 3, '#0d0d10'); }
+    R(ox, top, ow, 1, men ? '#222226' : '#8f8268'); R(ox, mid, ow, 2, men ? '#2c2c30' : '#c7b99f');   // top rail + cross rail
+    R(ox + ow - 4, mid + 4, 2, 3, '#cfd3d6');                         // latch
+    R(ox, TILE - 1, ow, 1, '#4a463f');                                // threshold
+  } else if (men) {
+    // doorway: dark inside, a lit lintel and a dark door leaf swung open on the left
+    R(ox, top, ow, h, '#0c0c0f');
+    R(ox + 9, top + 5, ow - 12, 9, '#16161b');                        // faint depth of the corridor
+    R(ox, top, ow, 2, '#a8723a');                                     // warm light on the lintel
+    R(ox, top + 2, 7, h - 2, '#3c3b40'); R(ox, top + 2, 1, h - 2, '#6e6d73'); R(ox + 6, top + 2, 1, h - 2, '#1f1f23');   // open door leaf
+    R(ox + 4, mid, 1, 4, '#b9bec2');                                  // handle
+    R(ox + 7, TILE - 3, ow - 7, 3, '#25262c'); R(ox + 7, TILE - 3, ow - 7, 1, '#363840');   // floor inside catching a little light
+  } else {
+    // doorway: warm light at the top, a cream door leaf open on the left, the inner door with the red/white sign, grey floor tiles
+    R(ox, top, ow, h, '#16151b');
+    R(ox, top, ow, 3, '#e29a52'); R(ox, top + 3, ow, 2, '#8a5a31');   // warm glow at the top
+    R(ox + 11, top + 7, 9, h - 10, '#2b2931');                        // inner door
+    R(ox + 14, top + 10, 4, 6, '#f4f4f4'); R(ox + 14, top + 10, 4, 1, '#c0392b'); R(ox + 14, top + 15, 4, 1, '#c0392b'); R(ox + 15, top + 12, 2, 2, '#2a2a2e');   // no-smoking sign
+    R(ox + 9, TILE - 4, ow - 9, 4, '#44545c'); R(ox + 9, TILE - 4, ow - 9, 1, '#6e8089');   // floor inside
+    R(ox, top, 9, h, '#d8d1bf'); R(ox, top, 1, h, '#efe9da'); R(ox + 9, top, 1, h, '#8c8575');   // cream door leaf
+    R(ox + 1, top + 2, 7, 6, '#cbc3ae'); R(ox + 1, top + 11, 7, 7, '#cbc3ae');                   // raised panels
+    R(ox + 7, mid + 1, 1, 4, '#9a9fa3');                              // handle
+  }
+}
+
+// The fade + text card of a restroom visit (restroom.js): drawn above everything, in screen space.
+function drawRestroomScene() {
+  const dark = restroom.alpha;
+  if (dark > 0) { ctx.fillStyle = `rgba(0,0,0,${dark})`; ctx.fillRect(0, 0, VW, VH); }
+  const a = restroom.cardAlpha;
+  if (a <= 0) return;
+  const men = restroom.kind === 'men', cx = VW / 2, cy = VH / 2 - 14;
+  ctx.save(); ctx.globalAlpha = a;
+  drawSign(cx - 18, cy - 92, 4, restroom.kind);                       // big sign on top of the card (36 x 44)
+  if (!men) {                                                         // denied: a red 'no entry' ring + slash over the sign
+    ctx.strokeStyle = '#e0445a'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(cx, cy - 70, 27, 0, Math.PI * 2); ctx.moveTo(cx - 19, cy - 89); ctx.lineTo(cx + 19, cy - 51); ctx.stroke();
+  }
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 16px monospace'; ctx.fillStyle = men ? '#ffd54f' : '#ff7a8c';
+  ctx.fillText(men ? "Men's Restroom" : "Women's Restroom - Not for you", cx, cy - 20);
+  ctx.font = '16px monospace'; ctx.fillStyle = '#fff';
+  const full = restroom.lines[restroom.i], words = full.split(' ');   // word-wrap using the FULL line so words do not jump while typing
+  const rows = []; let row = '';
+  for (const w of words) { if (ctx.measureText(row + w).width > VW - 120) { rows.push(row.trim()); row = ''; } row += w + ' '; }
+  rows.push(row.trim());
+  let shown = Math.floor(restroom.typed);
+  rows.forEach((r, k) => {
+    const part = r.slice(0, Math.max(0, shown)); shown -= r.length + 1;
+    ctx.fillText(part, cx, cy + 12 + k * 22);
+  });
+  if (restroom.lineDone) {
+    const last = restroom.i >= restroom.lines.length - 1;
+    ctx.font = '12px monospace'; ctx.fillStyle = '#9a9aa6';
+    ctx.fillText(last ? '[E] Done' : '[E] Next', cx, VH - 34);
+  }
   ctx.restore();
 }
 
@@ -991,6 +1129,7 @@ export function render(game, time) {
   if (fade > 0) {                                    // drawn last = covers everything
     ctx.fillStyle = `rgba(0,0,0,${fade})`; ctx.fillRect(0, 0, VW, VH);
   }
+  if (restroom.active) drawRestroomScene();           // restroom visit: fade (black for the men's, a dim for the women's) + text card
 }
 
 function drawDebug({ player, npc }) {
