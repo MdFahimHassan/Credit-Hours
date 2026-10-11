@@ -35,6 +35,7 @@ const COLORS = {
   'K': '#4f4f5a',                       // storage room block (solid)
   'C': '#b8b2a4', 'T': '#b8b2a4', 'b': '#4a9a4a',   // bench + planter (floor first, drawn in drawBench / drawPlanter), bush
   'H': '#1f5a28', 'Y': '#1f5a28', 'Z': '#1f5a28',   // planted areas: hedge / bush mound / tree (drawn in drawPlanted)
+  'e': '#5b5b66', 'j': '#5b5b66',       // glass doors on the west wall (wall colour, door drawn on top)
   'J': '#5b5b66', 'Q': '#5b5b66',       // gym door / poster wall (wall colour, details drawn on top)
   'r': '#b8453f',                       // red gym mat (walkable)
   'M': '#5b5b66', 'G': '#5b5b66',       // restroom doors (wall colour, door drawn on top)
@@ -114,8 +115,12 @@ function railV(x, y, east, g = ctx, sh = true) {          // vertical rail segme
   g.fillStyle = RAIL.hand; g.fillRect(hx, y, 2, TILE);
   g.fillStyle = RAIL.post; g.fillRect(x, y, 7, 2); g.fillRect(x, y + TILE - 2, 7, 2);
 }
+// The two hedge beds beside the stairs (zone 1, rows 0-5: x3-4 and x17-19) sit against the semi-wall and the steps, which are solid, so they
+// used to get no guard rail. A rail is now drawn on those faces too (same rail as every other hedge). The top edge (map edge) stays open.
+const isStairBed = (x, y) => zoneId === 'zone1' && y >= 0 && y <= 5 && ((x >= 3 && x <= 4) || (x >= 17 && x <= 19));
+const isRailable = (x, y, fx, fy) => !isPlanted(x, y) && (!isSolid(x, y) || (isStairBed(fx, fy) && (getTile(x, y) === 'q' || getTile(x, y) === 'm' || isTierCh(getTile(x, y)))));   // (fx, fy) = the hedge tile asking
 function drawGuardRail(px, py, tx, ty) {
-  const open = (x, y) => !isPlanted(x, y) && !isSolid(x, y);   // floor / path next to the planted area
+  const open = (x, y) => isRailable(x, y, tx, ty);   // floor / path next to the planted area (or the wall / steps beside a stair-side bed)
   if (open(tx, ty - 1)) railH(px, py);
   if (open(tx, ty + 1)) railH(px, py + TILE - 7);
   if (open(tx - 1, ty)) railV(px, py, false);
@@ -127,7 +132,7 @@ const foliageLayers = {};
 function foliageLayer() {
   if (!foliageLayers[zoneId]) foliageLayers[zoneId] = buildOverlay({
     zoneId, cols, rows, widthPx, heightPx, getTile, isPlanted,
-    isOpen: (x, y) => !isPlanted(x, y) && !isSolid(x, y),
+    isOpen: (x, y, fx, fy) => isRailable(x, y, fx, fy),
     isSpill: (x, y) => getTile(x, y) === 'q' || isTierCh(getTile(x, y)),   // low walls and the big steps: hedges overgrow them
     paintRail: (g, face, px, py) => {                         // the rail of one face, WITHOUT its shadow (the tile already drew that)
       if (face === 'N') railH(px, py, g, false); else if (face === 'S') railH(px, py + TILE - 7, g, false);
@@ -673,6 +678,8 @@ function drawTile(ch, px, py, tx, ty, time) {
     ctx.fillStyle = 'rgba(255,255,255,0.06)'; for (let i = 5; i < TILE; i += 6) ctx.fillRect(px, py + i, TILE, 1);
     if ((tx + ty) % 2 === 0) { ctx.fillStyle = 'rgba(0,0,0,0.05)'; ctx.fillRect(px, py, TILE, TILE); }
     ctx.fillStyle = '#e0a82e'; ctx.fillRect(px, py, 3, TILE);
+  } else if (ch === 'e' || ch === 'j') {              // two glass doors, top-left wall
+    drawGlassDoor(ch, px, py, tx, ty);
   } else if (ch === 'J' || ch === 'Q') {              // gym facade (west wall, faces east)
     drawGymWall(ch, px, py, tx, ty);
   } else if (ch === 'M' || ch === 'G') {              // restroom door with a sign: M = men, W = women
@@ -721,6 +728,40 @@ function drawTile(ch, px, py, tx, ty, time) {
   } else if (ch === 'W') {
     drawGlassFront(ctx, px, py, tx, ty);
   }
+}
+
+
+// ---- glass doors (e = south door: two panes, j = north door: three panes), zone 1 west wall, rows 2-3 and 5-6 ------------------
+// Copied from the lobby video: a pale plastered wall, a recessed opening with a thin grey aluminium frame and tall panes of clear,
+// slightly blue glass (the bright day outside shows through), a dark handle on the middle stile and a plain threshold.
+// Each door is 2 tiles long (64px). Like the lifts/gym it is drawn as a front view and turned a quarter turn, so
+// left -> right on the front view = SOUTH -> NORTH on the map. The southern tile of a door is its left half.
+function drawGlassDoor(ch, px, py, tx, ty) {
+  const north = getTile(tx, ty - 1) !== ch;                       // is this the northern tile (right half) of its door?
+  const off = north ? TILE : 0;
+  const panes = ch === 'e' ? [[5, 27], [29, 27]] : [[5, 17], [24, 17], [43, 16]];   // [x, width] of each pane in the 64px front view
+  ctx.save();
+  ctx.beginPath(); ctx.rect(px, py, TILE, TILE); ctx.clip();
+  ctx.translate(px + TILE / 2, py + TILE / 2); ctx.rotate(-Math.PI / 2); ctx.translate(-TILE / 2, -TILE / 2);
+  ctx.translate(-off, 0);                                         // now 0..64 along the door, 0..32 from the wall out to the floor
+  const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+  R(0, 0, 64, TILE, '#d9d7d0'); R(0, 0, 64, 3, '#eceae4');         // pale plaster wall + lit lintel edge
+  R(0, 26, 64, 6, '#c2c0b8');                                      // wall base
+  R(2, 4, 60, 24, '#4d5156');                                      // opening: dark inner reveal
+  R(3, 5, 58, 22, '#8a9096');                                      // thin aluminium frame
+  for (const [x, w] of panes) {
+    R(x, 6, w, 20, '#dcebee');                                     // clear glass, bright from the daylight behind it
+    R(x, 6, w, 7, '#eef7f8'); R(x, 19, w, 7, '#b9ced3');           // brighter top, a little darker low down
+    R(x + 2, 8, 2, 16, 'rgba(255,255,255,0.55)');                  // glossy reflection streak
+    R(x + w - 3, 9, 1, 14, 'rgba(120,150,160,0.35)');
+  }
+  for (let i = 1; i < panes.length; i++) {                         // stiles between panes
+    const sx = panes[i][0] - 2; R(sx, 5, 2, 22, '#6f757b');
+  }
+  if (ch === 'e') { R(30, 13, 1, 7, '#1b1b22'); R(33, 13, 1, 7, '#1b1b22'); }   // handles either side of the meeting stile
+  else { R(20, 14, 1, 6, '#1b1b22'); R(23, 14, 1, 6, '#1b1b22'); }
+  R(2, 27, 60, 2, '#3a3d42');                                      // threshold
+  ctx.restore();
 }
 
 // ---- gymnasium facade (J = sliding glass door, Q = poster + cabinet wall) ---------------------------------

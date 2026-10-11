@@ -45,7 +45,7 @@ export function getTile(tx, ty) {
   if (tx < 0 || ty < 0 || tx >= cols || ty >= rows) return '#'; // outside = wall
   return grid[ty][tx];
 }
-export const isSolid = (tx, ty) => '#RLlAfdDvEFB~MGKCTWHYZJQaoc12345678qmk'.includes(getTile(tx, ty));   // H = hedge, Y = bush mound, Z = tree, J = gym door, Q = gym poster wall, c = pillar, 1-6 = amphitheatre tiers, m = flat base slab under the tiers, q = hedge semi-wall (all solid)
+export const isSolid = (tx, ty) => '#RLlAfdDvEFB~MGKCTWHYZJQaoc12345678qmkej'.includes(getTile(tx, ty));   // H = hedge, Y = bush mound, Z = tree, J = gym door, Q = gym poster wall, c = pillar, 1-6 = amphitheatre tiers, m = flat base slab under the tiers, q = hedge semi-wall (all solid)
 
 // Exit info for a tile of the current zone (or null)
 export const getExit = (tx, ty) => ZONES[zoneId].exits?.[tx + ',' + ty] ?? null;

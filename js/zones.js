@@ -24,6 +24,7 @@
 //   H  clipped hedge    Y  bush mound    Z  tree     (mix them freely, e.g. HHYHZHHY)
 // Gymnasium (zone 1, left wall, rows 24-27):
 //   J  gym sliding glass door (solid)   Q  wall with the usage-rules poster + wooden cabinet (solid)   r  red gym mat (walkable, 3 tiles between the two doors)
+//   e / j  glass doors on the zone 1 west wall (solid, 2 tiles long each): e = south door (rows 5-6, two panes), j = north door (rows 2-3, three panes)
 //   H  dense hedge (SOLID - a bush you can NOT walk through; used for the hedge lanes in zone 1)
 // New in zone 3:
 //   g  grass (walkable lawn)   K  storage room block (solid)   S on the bottom row = stairs down to zone 1
@@ -66,17 +67,17 @@ export const ZONES = {
   zone1: {
     name: 'Rooftop Entry',
     rows: [
-    "#UqHY876SS66SS678YHYqkkkHZHUURRRRRRRRR",
+    "#UqHY876SS66SS678YHYqkkkHZHUUHHRRRRRRR",
     "#.qYH765SS55SS567HZHqkkkHYH..HH......R",
-    "#.qHH654SS44SS456HYZqkkkHHZ..HH..CCC.R",
-    "#.qZH543SS33SS345ZHHq...HHY..HH..CTC.R",
+    "j.qHH654SS44SS456HYZqkkkHHZ..HH..CCC.R",
+    "j.qZH543SS33SS345ZHHq...HHY..HH..CTC.R",
     "#.qHY432SS22SS234HHYq...HYZ..HH..CTC.R",
-    "#.qYH321......123YHHq...HYH..HH..CCC.R",
-    "#.qqqmmm......mmmqqqq................R",
+    "e.qYH321......123YHHq...HYH..HH..CCC.R",
+    "e.qqqmmm......mmmqqqq................R",
     "#....................................R",
     "#............................HHYHYYHZ#",
     "#..c...c...c...c...c.WWWWWW.cYZHZHYHH#",
-    "#....................WWWWWW..YHHHYHYH#",
+    "X....................WWWWWW..YHHHYHYH#",
     "X....................WWWWWW..HHZHHHZH#",
     "LLL......ao..........WWWWWW..HHHHHYHY#",
     "d........RRRRRRRRR...WWWWWW..ZYHZHHHH#",
@@ -86,7 +87,7 @@ export const ZONES = {
     "f........RRRRRRRRR...WWWWWW..HHZHHHHH#",
     "LLL..................WWWWWW..HHYYHHYH#",
     "X....................WWWWWW..ZYYYHYZH#",
-    "#....................WWWWWW..HYHHHHHY#",
+    "X....................WWWWWW..HYHHHHHY#",
     "#..c...c...c...c...c........cHHHYYHYH#",
     "#.............I......................R",
     "#....................................R",
@@ -99,7 +100,9 @@ export const ZONES = {
     ],
     exits: {
       '0,11': { to: 'zone2', spawn: { x: 28, y: 4 },  facing: 'left', label: 'Right path' },
+      '0,10': { to: 'zone2', spawn: { x: 28, y: 3 },  facing: 'left', label: 'Right path' },
       '0,19': { to: 'zone2', spawn: { x: 28, y: 13 }, facing: 'left', label: 'Left path' },
+      '0,20': { to: 'zone2', spawn: { x: 28, y: 14 }, facing: 'left', label: 'Left path' },
       '1,0':  { to: 'zone3', spawn: { x: 2, y: 16 },  facing: 'up', label: 'Up path (left)' },
       // 2-wide path at the top right: will lead to the upper zone (no 'to' yet = just shows a hint)
       '27,0': { label: 'Upper zone path' },

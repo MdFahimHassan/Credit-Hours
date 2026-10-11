@@ -268,7 +268,7 @@ export function buildOverlay(opt) {
     const px = tx * TILE, py = ty * TILE;
     Object.entries(FACES).forEach(([name, F], id) => {
       const nx = tx + F.d[0], ny = ty + F.d[1];
-      if (isOpen(nx, ny)) faces.push({ name, id, tx, ty, px, py, m: F.m(px, py) });
+      if (isOpen(nx, ny, tx, ty)) faces.push({ name, id, tx, ty, px, py, m: F.m(px, py) });
       else if (isSpill?.(nx, ny)) spills.push({ name, id, tx, ty, px, py, m: F.m(px, py) });
     });
   }
