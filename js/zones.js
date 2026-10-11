@@ -123,17 +123,19 @@ export const ZONES = {
   // SOUTH SIDE: a 1-tile path runs along row 28 from the west rail to the east exit (30,28), which meets zone 1's bottom-left opening.
   //   The bottom hedge lane ends on row 27; a 12x4 hedge (x10-21, rows 24-27) sits on the path's north side, then a plaster block (x22-29, rows 24-27)
   //   carries the women's restroom doors (G G at x23-24, row 24, on the pool-facing north side). The whole south wall (row 29) is a rail with the city skyline beyond.
+  // NORTH SIDE mirrors the south: a 12x5 hedge (x11-22, rows 1-5) flush against the north wall (shifted 1 tile so the up-path at x9-10 stays open) and a
+  //   plaster block (x23-29, rows 1-5) with the men's restroom doors (M M at x24-25, row 5, on the pool-facing south side).
   // The path to zone 4 is the 2-wide 'U' in the north wall at x 9-10, right beside the sitting area (like zone 1's upper-zone path).
   zone2: {
     name: 'Pool Zone',
     spawn: { x: 29, y: 10 },
     rows: [
-    "R########UU############MM######",
-    "R......HH.....................#",
-    "R.CCC..HH.....................#",
-    "R.CTC..HH.....................#",
-    "R.CTC..HH.....................#",
-    "R.CCC..HH.....................#",
+    "R########UU####################",
+    "R......HH..YYHHYYZYHHYH########",
+    "R.CCC..HH..HZHHHHHHHZHY########",
+    "R.CTC..HH..HHHHHHHZHHYY########",
+    "R.CTC..HH..HHYYHHYHYHZY########",
+    "R.CCC..HH..HYHHZHHYHHYH#MM#####",
     "R.............................#",
     "R.............................#",
     "#ZHYY.........................#",
