@@ -17,6 +17,7 @@
 //
 // TWEAK ME: the numbers marked (*) below.
 import { TILE } from './map.js';
+import { paintLeafMass } from './canopy.js';
 
 // Where vines hang over the building edge: zone -> side -> [[first tile, last tile], ...] along that edge.
 export const VINE_EDGES = { zone1: { e: [[8, 21]] } };         // (*) the hedge bed in the middle of the east side
@@ -106,15 +107,9 @@ export function hedgeBase(px, py) {
 }
 export function paintHedge(g, px, py, tx, ty) {
   const dd = density(px + TILE / 2, py + TILE / 2);
-  g.fillStyle = hedgeBase(px, py); g.fillRect(px, py, TILE, TILE);   // base tone blends smoothly with density (no per-tile flip)
+  g.fillStyle = '#173d1e'; g.fillRect(px, py, TILE, TILE);   // base tone blends smoothly with density (no per-tile flip)
 
-  const gx0 = Math.floor((px - 9) / 11), gx1 = Math.floor((px + TILE + 9) / 11);       // leaf mass underneath: blobs on a WORLD grid,
-  const gy0 = Math.floor((py - 9) / 11), gy1 = Math.floor((py + TILE + 9) / 11);       // so neighbouring tiles share them (no tile seams)
-  for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) {
-    const h = hash(gx, gy, 1), cx = gx * 11 + 5 + (h - 0.5) * 4, cy = gy * 11 + 5 + (hash(gx, gy, 2) - 0.5) * 4;
-    g.fillStyle = pick(density(cx, cy) > 0.5 ? ['#2e7d32', '#388e3c', '#43a047', '#3a8a3e'] : ['#2a7030', '#2e7d32', '#25702c', '#388e3c'], h);
-    g.beginPath(); g.arc(cx, cy, 8, 0, Math.PI * 2); g.fill();
-  }
+  paintLeafMass(g, px, py, 0);                                  // leaf mass underneath: small leaves on a WORLD grid, so neighbouring tiles share them (no tile seams)
 
   if (dd < 0.55) {                                              // ---- sparse: planter bed (blades + monstera) ----
     const k = 1 - dd;

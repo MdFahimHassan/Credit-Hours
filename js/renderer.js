@@ -11,6 +11,7 @@ import { skyline, drawSkyline } from './skyline.js';
 import { setVirtualUp, UP_ROWS, WATER_FILTERS } from './map.js';
 import { getFloor } from './floor.js';
 import { paintHedge, hedgeBase, buildOverlay } from './foliage.js';
+import { paintLeafMass, massBase, drawCrown } from './canopy.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -70,33 +71,33 @@ const isPlanted = (x, y) => { const c = getTile(x, y); return c === 'H' || c ===
 const rnd = (a, b, c = 0) => Math.abs(Math.sin(a * 12.9898 + b * 78.233 + c * 37.719) * 43758.5453) % 1;
 function disc(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
 
-function drawPlanted(ch, px, py, tx, ty) {
-  ctx.save();
-  ctx.beginPath(); ctx.rect(px, py, TILE, TILE); ctx.clip();       // leaves never spill onto neighbour tiles
-  if (ch === 'Y') {                                                // bush mounds: rounder and lighter than the hedge
-    ctx.fillStyle = hedgeBase(px, py); ctx.fillRect(px, py, TILE, TILE);          // same base tone as the hedge tiles around it
-    const shades = ['#2f8a37', '#3a9a42', '#43a047', '#2c7d33'];
-    [[9, 10], [22, 9], [11, 23], [24, 22], [16, 16]].forEach(([sx, sy], i) => {
-      const cx = px + sx + (rnd(tx, ty, i) - 0.5) * 4, cy = py + sy + (rnd(tx, ty, i + 9) - 0.5) * 4;
-      ctx.fillStyle = 'rgba(0,0,0,0.25)'; disc(cx + 1, cy + 2, 9);
-      ctx.fillStyle = shades[i % shades.length]; disc(cx, cy, 8.5);
-      ctx.fillStyle = '#8bd18f'; ctx.fillRect(Math.round(cx - 3), Math.round(cy - 4), 3, 2);
-    });
-  } else if (ch === 'Z') {                                         // tree: one big canopy
-    ctx.fillStyle = hedgeBase(px, py); ctx.fillRect(px, py, TILE, TILE);
-    ctx.fillStyle = 'rgba(0,0,0,0.30)'; disc(px + 17, py + 19, 14.5);
-    ctx.fillStyle = '#2e7d32'; disc(px + 16, py + 15, 14.5);
-    ctx.fillStyle = '#388e3c'; disc(px + 12, py + 12, 9); disc(px + 21, py + 17, 8);
-    ctx.fillStyle = '#4caf50'; disc(px + 11, py + 9, 5);
-    ctx.fillStyle = '#8bd18f';
-    ctx.fillRect(px + 9, py + 7, 3, 2); ctx.fillRect(px + 20, py + 13, 3, 2); ctx.fillRect(px + 14, py + 20, 3, 2);
+const plantCache = new Map();                                      // one finished 32x32 picture per planted tile (they never change)
+function paintPlantedTile(g, ch, px, py, tx, ty) {
+  if (ch === 'Y') {                                                // bush mound: same leaf mass as the hedge, a little lighter and fluffier
+    g.fillStyle = massBase; g.fillRect(px, py, TILE, TILE);
+    paintLeafMass(g, px, py, 0.10);
+  } else if (ch === 'Z') {                                         // tree standing in the hedge: leafy mass with a ragged crown on top
+    g.fillStyle = massBase; g.fillRect(px, py, TILE, TILE);
+    paintLeafMass(g, px, py, 0.02);
+    drawCrown(g, px + 16, py + 15, tx, ty, 14);
   } else {                                                         // hedge: sparse planter bed <-> dense ivy, decided by a noise field (see foliage.js)
-    paintHedge(ctx, px, py, tx, ty);
+    paintHedge(g, px, py, tx, ty);
   }
   // light top edge / dark base only where the planted area ENDS, so a block of tiles reads as one big mass
-  if (ty > 0 && !isPlanted(tx, ty - 1)) { ctx.fillStyle = 'rgba(190,240,170,0.28)'; ctx.fillRect(px, py, TILE, 4); }   // (none at the map's top edge: the hedge carries on)
-  if (!isPlanted(tx, ty + 1)) { ctx.fillStyle = 'rgba(0,0,0,0.38)'; ctx.fillRect(px, py + TILE - 6, TILE, 6); }
-  ctx.restore();
+  if (ty > 0 && !isPlanted(tx, ty - 1)) { g.fillStyle = 'rgba(190,240,170,0.22)'; g.fillRect(px, py, TILE, 3); }
+  if (!isPlanted(tx, ty + 1)) { g.fillStyle = 'rgba(0,0,0,0.38)'; g.fillRect(px, py + TILE - 6, TILE, 6); }
+}
+function drawPlanted(ch, px, py, tx, ty) {
+  const key = zoneId + '|' + tx + '|' + ty + '|' + ch + '|' + (isPlanted(tx, ty - 1) ? 1 : 0) + (isPlanted(tx, ty + 1) ? 1 : 0);
+  let c = plantCache.get(key);
+  if (!c) {
+    c = document.createElement('canvas'); c.width = TILE; c.height = TILE;
+    const g = c.getContext('2d'); g.translate(-px, -py);
+    g.beginPath(); g.rect(px, py, TILE, TILE); g.clip();          // leaves never spill onto neighbour tiles
+    paintPlantedTile(g, ch, px, py, tx, ty);
+    plantCache.set(key, c);
+  }
+  ctx.drawImage(c, px, py);
   drawGuardRail(px, py, tx, ty);
 }
 
@@ -176,10 +177,6 @@ function drawPlanter(px, py, tx, ty) {
   if (!n) { ctx.fillStyle = '#868890'; ctx.fillRect(x0, y0, x1 - x0, 2); }                // lit rim
   if (!s) { ctx.fillStyle = '#4d4f55'; ctx.fillRect(x0, y1 - 5, x1 - x0, 5); }            // darker front face
   ctx.fillStyle = '#3b4a33'; ctx.fillRect(x0 + 3, y0 + (n ? 0 : 3), x1 - x0 - 6, (y1 - y0) - (n ? 0 : 3) - (s ? 0 : 6));   // soil
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'; disc(px + 17, py + 17, 12);                         // canopy shadow
-  ctx.fillStyle = '#2e7d32'; disc(px + 16, py + 14, 12);
-  ctx.fillStyle = '#43a047'; disc(px + 12, py + 10, 7);
-  ctx.fillStyle = '#8bd18f'; ctx.fillRect(px + 9, py + 7, 3, 2); ctx.fillRect(px + 19, py + 14, 3, 2);
 }
 
 // ---- railings (R): wide grey steel slats (4px slat, 4px gap) between a thin top bar and bottom bar, standing on a
@@ -954,6 +951,7 @@ export function render(game, time) {
   for (let ty = y0; ty <= y1; ty++)
     for (let tx = x0; tx <= x1; tx++)
       drawTile(getTile(tx, ty), tx * TILE, ty * TILE, tx, ty, time);
+  for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) if (getTile(tx, ty) === 'T') drawCrown(ctx, tx * TILE + 16, ty * TILE + 15, tx, ty, 19);   // the sitting-area trees: crowns drawn over their planters
   if (zoneId === 'zone1') drawEscalatorNose(x0, x1, y0, y1, time);
   if (zoneId === 'zone1') drawBasementBlock(camera);   // storage-room stairwell (k / z tiles)   // the escalator well + rounded end of the escalator railing
   drawFoliage(x0, x1, y0, y1);                       // leaves poking through / over the hedge rails
