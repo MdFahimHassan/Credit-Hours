@@ -870,7 +870,6 @@ export function render(game, time) {
   const { player, npc, debug } = game;
   updateCamera(player);
   ctx.clearRect(0, 0, VW, VH);
-  if (skyline.any()) { ctx.fillStyle = '#a9b1b6'; ctx.fillRect(0, 0, VW, VH); }   // safety colour behind the skyline
   ctx.save();
   ctx.translate(-camera.x, -camera.y);               // everything below is in WORLD pixels
   drawSkyline(ctx, camera, VW, VH, time);            // the city beyond the rails (before the tiles, so the rail slats are see-through)
