@@ -847,7 +847,7 @@ function drawGymWall(ch, px, py, tx, ty) {
 // Copied from the real lobby photo. Seen from the lobby, left -> right is SOUTH -> NORTH on the map:
 //   L brick pillar (x0-2, rows 12 and 18) | f white wall strip (rows 13, 17) | l lift 03 | A steel panel with the "13 LEVEL" sign + call button | l lift 04
 // Like the gym, each tile is drawn as a normal front view (x along the wall, y = from the wall out to the floor) and turned a quarter turn.
-// Zone 2 has the same lift set on its EAST wall (rows 5-11, between the two exit paths): L f l A l d L from north to south; row 12 is plain plaster wall.
+// Zone 2 has the same lift set on its EAST wall (rows 11-17, between the two exit paths): L f l A l d L from north to south; row 18 is plain plaster wall.
 // A west wall turns the front view -90deg (left -> right = south -> north); an east wall turns it +90deg (left -> right = north -> south),
 // so the picture is NOT mirrored: it still reads f | lift | steel panel | lift | directory from the left, just facing west into the pool zone.
 function drawLiftWall(ch, px, py, tx, ty) {
@@ -873,7 +873,7 @@ function drawLiftWall(ch, px, py, tx, ty) {
     R(12, 18, 8, 1, '#9fc4f2');
     R(13, 21, 6, 8, '#7e848b'); R(14, 22, 4, 1, '#c8ccd0'); R(15, 25, 2, 3, '#e8eaed');   // call button plate
   } else {                                                                         // 'l': one lift (one tile wide)
-    const num = east ? (ty <= 7 ? '01' : '02') : (ty <= 14 ? '04' : '03');   // zone 2: lifts 01 (north) + 02 (south) - change the text to rename them
+    const num = east ? (ty <= 13 ? '01' : '02') : (ty <= 14 ? '04' : '03');   // zone 2: lifts 01 (north) + 02 (south) - change the text to rename them
     ctx.scale(0.5, 1);                                                             // the 64-wide lift design squeezed into one tile
     R(0, 0, 64, 32, '#cfd2d6'); R(0, 0, 64, 5, '#e6e8ea');                         // pale wall + white lintel
     R(8, 2, 48, 4, '#1f6fd0'); R(8, 2, 48, 1, '#4a93ee');                         // blue "ELEVATOR 0x : floors" strip
@@ -890,7 +890,7 @@ function drawLiftWall(ch, px, py, tx, ty) {
   ctx.restore();
 }
 
-// Brick pillar (L, 3 tiles wide: zone 1 x0-2 rows 12 and 18, zone 2 x27-29 rows 5 and 12): rust-red tile blocks sticking out from the west wall; the north one carries the blue notice board.
+// Brick pillar (L, 3 tiles wide: zone 1 x0-2 rows 12 and 18, zone 2 x28-30 rows 11 and 17): rust-red tile blocks sticking out from the west wall; the north one carries the blue notice board.
 function drawLiftPillar(px, py, tx, ty) {
   const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(px + x, py + y, w, h); };
   R(0, 0, TILE, TILE, '#b9573a');
@@ -903,7 +903,7 @@ function drawLiftPillar(px, py, tx, ty) {
   R(0, TILE - 6, TILE, 6, '#8f3f29'); R(0, TILE - 6, TILE, 1, '#a94c34');         // front face of the block (like the wall base)
   if (tx === 2 && ty === 12 && zoneId === 'zone1') {                              // notice board on the end of the north pillar
     R(22, 6, 8, 16, '#3bb4e0'); R(23, 8, 6, 6, '#e9f6fb'); R(23, 16, 6, 1, '#d4eef8'); R(23, 18, 4, 1, '#d4eef8');
-  } else if (tx === 27 && ty === 5 && zoneId === 'zone2') {                       // zone 2: same board on the free (west-facing) end of the north pillar
+  } else if (tx === 28 && ty === 11 && zoneId === 'zone2') {                       // zone 2: same board on the free (west-facing) end of the north pillar
     R(2, 6, 8, 16, '#3bb4e0'); R(3, 8, 6, 6, '#e9f6fb'); R(3, 16, 6, 1, '#d4eef8'); R(3, 18, 4, 1, '#d4eef8');
   }
 }

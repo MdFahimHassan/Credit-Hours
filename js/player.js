@@ -1,5 +1,5 @@
 // player.js - position, movement, and X/Y-separated collision.
-import { TILE, boxHitsSolid, solidRectsAt, isStairs } from './map.js';
+import { TILE, HEAD, boxHitsSolid, solidRectsAt, isStairs, headWallBottom } from './map.js';
 import { input } from './input.js';
 
 const STAIR_SPEED = 0.85;   // walking speed on the stairs (1 = same as flat ground)
@@ -65,6 +65,10 @@ export class Player {
       if (dy > 0) this.y = Math.min(...hit.map((r) => r.y)) - this.h;
       else if (dy < 0) this.y = Math.max(...hit.map((r) => r.y + r.h));
     }
+
+    // --- head clearance: keep the head off the plaster walls above (only if the player still fits below) ---
+    const wallBottom = headWallBottom(this.x, this.y, this.w);
+    if (wallBottom !== null && this.y < wallBottom + HEAD && !boxHitsSolid(this.x, wallBottom + HEAD, this.w, this.h)) this.y = wallBottom + HEAD;
 
     // walking animation only plays if we actually moved (not when pushing against a wall)
     const moved = Math.hypot(this.x - ox, this.y - oy);

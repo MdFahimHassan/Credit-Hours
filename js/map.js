@@ -132,3 +132,15 @@ export function findSeat(cx, cy) {
   }
   return best;
 }
+// Head clearance: the sprite is ~17px taller than the collision box, so walking up to a plaster wall used to put the head on the wall.
+// Walls in HEAD_WALLS keep the head off them: the player stops HEAD px short. (Skipped where there is no room, e.g. a 1-tile path under a wall.)
+export const HEAD = 14;
+const HEAD_WALLS = '#MGDKJQ';
+export function headWallBottom(x, y, w) {                // lowest pixel edge of a wall tile that the strip above the hitbox overlaps, or null
+  const x0 = Math.floor(x / TILE), x1 = Math.floor((x + w - 0.01) / TILE);
+  const y0 = Math.floor((y - HEAD) / TILE), y1 = Math.floor((y - 0.01) / TILE);
+  let best = null;
+  for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++)
+    if (HEAD_WALLS.includes(getTile(tx, ty))) best = Math.max(best ?? -Infinity, (ty + 1) * TILE);
+  return best;
+}

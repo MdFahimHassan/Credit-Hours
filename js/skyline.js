@@ -54,8 +54,8 @@ const EO = PH / Z;            // depth of the painting in its own (zoomed) units
 //   WINDOW_FILL tile ranges that show the skyline although they have no rail (zone 1: the wall behind the east hedge bed)
 //   WALL_STYLE  'concrete' (default) or 'terrace' (the wall of the level above, with planters and vines)
 // ---------------------------------------------------------------------------------------------
-const SKIP = { zone1: ['w'], zone2: ['n', 's'] };   // zone 2: the corner rail tiles (0,0) / (0,17) belong to the west skyline only
-const WINDOW_FILL = { zone1: { e: [[8, 21]] } };
+const SKIP = { zone1: ['w'], zone2: ['n', 's'] };   // zone 2: the corner rail tiles (0,0) / (0,29) belong to the west skyline only
+const WINDOW_FILL = { zone1: { e: [[8, 21]] }, zone2: { w: [[8, 21]] } };   // zone 2: the wall behind the west hedge bed
 const WALL_STYLE = { zone1: { n: 'terrace' } };
 const wallStyle = (zid, side) => WALL_STYLE[zid]?.[side] ?? 'concrete';
 // EXTEND: the skyline of this side carries on past the START of the edge (u < 0) instead of ending in a cream-wall corner.

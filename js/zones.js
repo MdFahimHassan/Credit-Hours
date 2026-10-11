@@ -7,7 +7,7 @@
 //   c  steel-blue pillar on a concrete plinth (solid) - zone 1: two rows (9 and 21), 6 tiles above / below the escalator
 //   p  old "path" tile (walkable). Zone 1 no longer uses it; in other zones it now just looks like the stone floor
 //   X  exit path           U  "up" path            S  stairs            D  store room door (solid)
-//   L  brick pillar beside the lifts (solid, zone 1: x0-2 on rows 12 and 18, one tile beyond the white wall strips; zone 2: x27-29 on rows 5 and 12, east wall)   f  white wall strip beside the lifts (rows 13 and 17)   d  same strip with the 'All Floor Directory' board (row 13)   l  lift door   A  steel panel with the '13 LEVEL' sign (both solid)
+//   L  brick pillar beside the lifts (solid, zone 1: x0-2 on rows 12 and 18, one tile beyond the white wall strips; zone 2: x28-30 on rows 11 and 17, east wall)   f  white wall strip beside the lifts (rows 13 and 17)   d  same strip with the 'All Floor Directory' board (row 13)   l  lift door   A  steel panel with the '13 LEVEL' sign (both solid)
 //   E/F escalators (solid, animated)             v  escalator well (solid)
 //   W  raised glass skylight (solid, see-through to the floor below)
 //   1-6    amphitheatre sitting tiers (solid), 1 = lowest step, 6 = highest - zone 1 upper section; corners are rounded where a block sticks out
@@ -99,46 +99,72 @@ export const ZONES = {
     "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
     ],
     exits: {
-      '0,11': { to: 'zone2', spawn: { x: 28, y: 4 },  facing: 'left', label: 'Right path' },
-      '0,10': { to: 'zone2', spawn: { x: 28, y: 3 },  facing: 'left', label: 'Right path' },
-      '0,19': { to: 'zone2', spawn: { x: 28, y: 13 }, facing: 'left', label: 'Left path' },
-      '0,20': { to: 'zone2', spawn: { x: 28, y: 14 }, facing: 'left', label: 'Left path' },
+      '0,11': { to: 'zone2', spawn: { x: 29, y: 10 },  facing: 'left', label: 'Right path' },
+      '0,10': { to: 'zone2', spawn: { x: 29, y: 9 },  facing: 'left', label: 'Right path' },
+      '0,19': { to: 'zone2', spawn: { x: 29, y: 19 }, facing: 'left', label: 'Left path' },
+      '0,20': { to: 'zone2', spawn: { x: 29, y: 20 }, facing: 'left', label: 'Left path' },
       '1,0':  { to: 'zone3', spawn: { x: 2, y: 16 },  facing: 'up', label: 'Up path (left)' },
       // 2-wide path at the top right: will lead to the upper zone (no 'to' yet = just shows a hint)
       '27,0': { label: 'Upper zone path' },
       '28,0': { label: 'Upper zone path' },
-      // bottom-left opening beside the gym: will link to the pool zone later (no 'to' yet = just shows a hint)
-      '0,28': { label: 'Pool zone path' },
+      // bottom-left opening beside the gym: the 1-tile path along row 28 of the pool zone
+      '0,28': { to: 'zone2', spawn: { x: 29, y: 28 }, facing: 'left', label: 'Pool zone path' },
     },
   },
 
+  // Zone 2 is 31 tiles wide and 30 tall.
+  // WEST STRIP (x 0-8): a mirrored copy of zone 1's east strip (x 29-37), so the two zones echo each other.
+  //   top sitting area (rows 1-7) | hedge band (rows 8-21) | bottom sitting area (rows 22-28)
+  //   sitting areas: bench ring (C) round a tree planter (T) at x 2-4, and a 2-wide hedge lane (H) at x 7-8 on the pool side
+  //   hedge band: a 4-wide hedge (x 1-4, 14 rows: zone 1's is 8 wide) against the west wall, then a 2-tile walkway (x 5-6), then the pool rim (x 7)
+  //   x 0 is a rail (R) beside the sitting areas and a wall (#) behind the hedge - like zone 1's east side, the skyline window carries on behind the hedge
+  //   and vines hang over the edge (see VINE_EDGES in foliage.js and WINDOW_FILL in skyline.js)
+  // The pool, the lift wall (east) and the restrooms are the old zone 2 moved 1 tile right and 6 rows down.
+  // SOUTH SIDE: a 1-tile path runs along row 28 from the west rail to the east exit (30,28), which meets zone 1's bottom-left opening.
+  //   The bottom hedge lane ends on row 27; a 12x4 hedge (x10-21, rows 24-27) sits on the path's north side, then a plaster block (x22-29, rows 24-27)
+  //   carries the women's restroom doors (G G at x23-24, row 24, on the pool-facing north side). The whole south wall (row 29) is a rail with the city skyline beyond.
+  // The path to zone 4 is the 2-wide 'U' in the north wall at x 9-10, right beside the sitting area (like zone 1's upper-zone path).
   zone2: {
     name: 'Pool Zone',
-    spawn: { x: 28, y: 4 },
+    spawn: { x: 29, y: 10 },
     rows: [
-    "R#U###################MM######",
-    "R.p....................pp....#",
-    "R.p....................pp....#",
-    "R.p..pppppppppppppppppppp....#",
-    "R.p..pBBBBBBBBBBBBBBBBBBpppppX",
-    "R.p..pB~~~~~~~~~~~~~~~~Bp..LLL",
-    "R.p..pB~~~~~~~~~~~~~~~~Bp....f",
-    "R.p..pB~~~~~~~~~~~~~~~~Bp....l",
-    "R.p..pB~~~~~~~~~~~~~~~~Bp....A",
-    "R.p..pB~~~~~~~~~~~~~~~~Bp....l",
-    "R.p..pB~~~~~~~~~~~~~~~~Bp....d",
-    "R.p..pB~~~~~~~~~~~~~~~~Bp..LLL",
-    "R.p..pB~~~~~~~~~~~~~~~~Bp....#",
-    "RpppppBBBBBBBBBBBBBBBBBBpppppX",
-    "Rpppppppppppppppppppppppp....#",
-    "R.....................ppp....#",
-    "R.....................ppp....#",
-    "R#####################GG######",
+    "R########UU############MM######",
+    "R......HH.....................#",
+    "R.CCC..HH.....................#",
+    "R.CTC..HH.....................#",
+    "R.CTC..HH.....................#",
+    "R.CCC..HH.....................#",
+    "R.............................#",
+    "R.............................#",
+    "#ZHYY.........................#",
+    "#HHYH.........................#",
+    "#HYHY..BBBBBBBBBBBBBBBBBB.....X",
+    "#HZHH..B~~~~~~~~~~~~~~~~B...LLL",
+    "#YHYH..B~~~~~~~~~~~~~~~~B.....f",
+    "#HHHH..B~~~~~~~~~~~~~~~~B.....l",
+    "#YHZH..B~~~~~~~~~~~~~~~~B.....A",
+    "#HYHY..B~~~~~~~~~~~~~~~~B.....l",
+    "#HHHH..B~~~~~~~~~~~~~~~~B.....d",
+    "#HHHH..B~~~~~~~~~~~~~~~~B...LLL",
+    "#HYHH..B~~~~~~~~~~~~~~~~B.....#",
+    "#HZYH..BBBBBBBBBBBBBBBBBB.....X",
+    "#YHHH.........................#",
+    "#HYHY.........................#",
+    "R.............................#",
+    "R.............................#",
+    "R.CCC..HH.HHYYHHYHYHZY#GG######",
+    "R.CTC..HH.HHHHHHHZHHYY#########",
+    "R.CTC..HH.HZHHHHHHHZHY#########",
+    "R.CCC..HH.YYHHYYZYHHYH#########",
+    "R.............................X",
+    "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR#",
     ],
     exits: {
-      '29,4':  { to: 'zone1', spawn: { x: 1, y: 11 }, facing: 'right', label: 'Right path' },
-      '29,13': { to: 'zone1', spawn: { x: 1, y: 19 }, facing: 'right', label: 'Left path' },
-      '2,0':   { to: 'zone4', spawn: { x: 2, y: 16 }, facing: 'up', label: 'Upper zone' },
+      '30,10': { to: 'zone1', spawn: { x: 1, y: 11 }, facing: 'right', label: 'Right path' },
+      '30,19': { to: 'zone1', spawn: { x: 1, y: 19 }, facing: 'right', label: 'Left path' },
+      '9,0':   { to: 'zone4', spawn: { x: 2, y: 16 }, facing: 'up', label: 'Upper zone' },
+      '10,0':  { to: 'zone4', spawn: { x: 3, y: 16 }, facing: 'up', label: 'Upper zone' },
+      '30,28': { to: 'zone1', spawn: { x: 1, y: 28 }, facing: 'right', label: 'Pool zone path' },   // the 1-tile path along row 28 meets zone 1's bottom-left opening
     },
   },
 
@@ -202,8 +228,8 @@ ZONES.zone4 = {
   exits: {
     '29,2':  { to: 'zone3', spawn: { x: 1, y: 5 },  facing: 'right', label: 'r path' },
     '29,14': { to: 'zone3', spawn: { x: 1, y: 14 }, facing: 'right', label: 'L path' },
-    '2,17':  { to: 'zone2', spawn: { x: 2, y: 1 },  facing: 'down',  label: 'Down to the pool' },
-    '3,17':  { to: 'zone2', spawn: { x: 3, y: 1 },  facing: 'down',  label: 'Down to the pool' },
+    '2,17':  { to: 'zone2', spawn: { x: 9, y: 1 },  facing: 'down',  label: 'Down to the pool' },
+    '3,17':  { to: 'zone2', spawn: { x: 10, y: 1 },  facing: 'down',  label: 'Down to the pool' },
   },
 };
 

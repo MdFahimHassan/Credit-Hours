@@ -20,7 +20,7 @@ import { TILE } from './map.js';
 import { paintLeafMass } from './canopy.js';
 
 // Where vines hang over the building edge: zone -> side -> [[first tile, last tile], ...] along that edge.
-export const VINE_EDGES = { zone1: { e: [[8, 21]] } };         // (*) the hedge bed in the middle of the east side
+export const VINE_EDGES = { zone1: { e: [[8, 21]] }, zone2: { w: [[8, 21]] } };   // (*) the hedge bed in the middle of the east side (zone 1) / west side (zone 2)
 
 const DENSE_SCALE = 150;     // (*) px: size of the big sparse / dense patches (bigger = longer stretches of the same look)
 const REACH = 8;             // (*) px: how far leaves normally stick out past the rail
@@ -274,13 +274,13 @@ export function buildOverlay(opt) {
   for (const f of faces) { g.save(); g.transform(...f.m); overRail(g, f); g.restore(); }   // pass 2: over the rail
   for (const f of spills) { g.save(); g.transform(...f.m); spillOver(g, f); g.restore(); }   // pass 2b: over walls / steps
 
-  const edge = VINE_EDGES[zoneId]?.e;                           // pass 3: hedge against the east wall of a vine edge
-  if (edge) {
-    const strands = vineStrands(zoneId, 'e');
+  for (const side of ['e', 'w']) {                              // pass 3: hedge against the east / west wall of a vine edge
+    const edge = VINE_EDGES[zoneId]?.[side];
+    if (!edge) continue;
+    const strands = vineStrands(zoneId, side), tx = side === 'e' ? cols - 2 : 1, wallX = side === 'e' ? tx + 1 : tx - 1;
     for (const [a, b] of edge) for (let ty = a; ty <= b; ty++) {
-      const tx = cols - 2;
-      if (!isPlanted(tx, ty) || getTile(tx + 1, ty) !== '#') continue;
-      const px = tx * TILE, py = ty * TILE, f = { tx, ty, px, py, m: FACES.E.m(px, py) };
+      if (!isPlanted(tx, ty) || getTile(wallX, ty) !== '#') continue;
+      const px = tx * TILE, py = ty * TILE, F = side === 'e' ? FACES.E : FACES.W, f = { tx, ty, px, py, m: F.m(px, py) };
       g.save(); g.transform(...f.m); wallSpill(g, f, strands); g.restore();
     }
   }
