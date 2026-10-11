@@ -7,7 +7,7 @@
 //   c  steel-blue pillar on a concrete plinth (solid) - zone 1: two rows (9 and 21), 6 tiles above / below the escalator
 //   p  old "path" tile (walkable). Zone 1 no longer uses it; in other zones it now just looks like the stone floor
 //   X  exit path           U  "up" path            S  stairs            D  store room door (solid)
-//   L  brick pillar beside the lifts (solid, zone 1: x0-2 on rows 12 and 18, one tile beyond the white wall strips)   f  white wall strip beside the lifts (rows 13 and 17)   d  same strip with the 'All Floor Directory' board (row 13)   l  lift door   A  steel panel with the '13 LEVEL' sign (both solid)
+//   L  brick pillar beside the lifts (solid, zone 1: x0-2 on rows 12 and 18, one tile beyond the white wall strips; zone 2: x27-29 on rows 5 and 12, east wall)   f  white wall strip beside the lifts (rows 13 and 17)   d  same strip with the 'All Floor Directory' board (row 13)   l  lift door   A  steel panel with the '13 LEVEL' sign (both solid)
 //   E/F escalators (solid, animated)             v  escalator well (solid)
 //   W  raised glass skylight (solid, see-through to the floor below)
 //   1-6    amphitheatre sitting tiers (solid), 1 = lowest step, 6 = highest - zone 1 upper section; corners are rounded where a block sticks out
@@ -116,24 +116,24 @@ export const ZONES = {
     name: 'Pool Zone',
     spawn: { x: 28, y: 4 },
     rows: [
-    "##U###################MM######",
+    "R#U###################MM######",
     "R.p....................pp....#",
     "R.p....................pp....#",
     "R.p..pppppppppppppppppppp....#",
     "R.p..pBBBBBBBBBBBBBBBBBBpppppX",
+    "R.p..pB~~~~~~~~~~~~~~~~Bp..LLL",
+    "R.p..pB~~~~~~~~~~~~~~~~Bp....f",
+    "R.p..pB~~~~~~~~~~~~~~~~Bp....l",
+    "R.p..pB~~~~~~~~~~~~~~~~Bp....A",
+    "R.p..pB~~~~~~~~~~~~~~~~Bp....l",
+    "R.p..pB~~~~~~~~~~~~~~~~Bp....d",
+    "R.p..pB~~~~~~~~~~~~~~~~Bp..LLL",
     "R.p..pB~~~~~~~~~~~~~~~~Bp....#",
-    "R.p..pB~~~~~~~~~~~~~~~~Bp....#",
-    "R.p..pB~~~~~~~~~~~~~~~~Bp....#",
-    "R.p..pB~~~~~~~~~~~~~~~~Bp....#",
-    "R.p..pB~~~~~~~~~~~~~~~~Bp....#",
-    "R.p..pB~~~~~~~~~~~~~~~~Bp....#",
-    "R.p..pB~~~~~~~~~~~~~~~~Bp....#",
-    "R.p..pB~~~~~~~~~~~~~~~~Bp....#",
-    "DpppppBBBBBBBBBBBBBBBBBBpppppX",
-    "Dpppppppppppppppppppppppp....#",
+    "RpppppBBBBBBBBBBBBBBBBBBpppppX",
+    "Rpppppppppppppppppppppppp....#",
     "R.....................ppp....#",
     "R.....................ppp....#",
-    "######################GG######",
+    "R#####################GG######",
     ],
     exits: {
       '29,4':  { to: 'zone1', spawn: { x: 1, y: 11 }, facing: 'right', label: 'Right path' },

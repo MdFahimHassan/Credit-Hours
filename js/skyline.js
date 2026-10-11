@@ -54,14 +54,14 @@ const EO = PH / Z;            // depth of the painting in its own (zoomed) units
 //   WINDOW_FILL tile ranges that show the skyline although they have no rail (zone 1: the wall behind the east hedge bed)
 //   WALL_STYLE  'concrete' (default) or 'terrace' (the wall of the level above, with planters and vines)
 // ---------------------------------------------------------------------------------------------
-const SKIP = { zone1: ['w'] };
+const SKIP = { zone1: ['w'], zone2: ['n', 's'] };   // zone 2: the corner rail tiles (0,0) / (0,17) belong to the west skyline only
 const WINDOW_FILL = { zone1: { e: [[8, 21]] } };
 const WALL_STYLE = { zone1: { n: 'terrace' } };
 const wallStyle = (zid, side) => WALL_STYLE[zid]?.[side] ?? 'concrete';
 // EXTEND: the skyline of this side carries on past the START of the edge (u < 0) instead of ending in a cream-wall corner.
 //   zone 1: the east skyline runs on up past the top-right corner, the south skyline runs on left past the bottom-left corner.
 //   It also carries on past the END of the edge, so the bottom-right corner (east + south) can turn smoothly (see drawCorner).
-const EXTEND = { zone1: { e: true, s: true } };
+const EXTEND = { zone1: { e: true, s: true }, zone2: { w: true } };   // zone 2: the west skyline runs the full height and on past both corners
 const EXT = 480;                // how far (px) the skyline carries on past the corner (the camera can never show more than PH = 320)
 // STAIRS_DARK: flights of stairs on these zones do NOT show steps / rails / extra view beyond the edge: the stairs lead straight
 // up to the next level (zone 1: the lawn, painted by renderer.js). The camera does not slide out for them either.
@@ -739,7 +739,7 @@ function drawSide(g, side, time) {
   g.save();
   g.beginPath();                                               // only the strip beyond this edge; a side with an extension also covers the corner at its start (see EXTEND)
   if (side === 'e') g.rect(W, -ext, over, H + ext);            // (the corner at the END of e / s is drawn by drawCorner, as one turning picture)
-  else if (side === 'w') g.rect(-over, 0, over, H);
+  else if (side === 'w') g.rect(-over, -ext, over, H + 2 * ext);   // (ext = 0 where the west side has no extension: zone 1)
   else if (side === 'n') g.rect(0, -over, W, over);
   else g.rect(-ext, H, W + ext, over);
   g.clip();
