@@ -82,9 +82,10 @@ const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
 function buildVariant(v) {
   const src = sheets[v.sheet];
-  const c = document.createElement('canvas'); c.width = 9 * FRAME; c.height = 4 * FRAME;
+  const c = document.createElement('canvas'); c.width = 9 * FRAME; c.height = 8 * FRAME;   // rows 0-3: walking | rows 4-7: the 'spellcast' pose (hands held up in front), see drawStudentPose
   const g = c.getContext('2d');
   for (let r = 0; r < 4; r++) g.drawImage(src, 0, (8 + r) * FRAME, 9 * FRAME, FRAME, 0, r * FRAME, 9 * FRAME, FRAME);
+  for (let r = 0; r < 4; r++) g.drawImage(src, 0, r * FRAME, 7 * FRAME, FRAME, 0, (4 + r) * FRAME, 7 * FRAME, FRAME);   // spellcast rows (up, left, down, right), 7 frames
   try {                                                      // recolour pixel by pixel
     const img = g.getImageData(0, 0, c.width, c.height), d = img.data;
     for (let i = 0; i < d.length; i += 4) {
@@ -130,6 +131,17 @@ export function drawStudent(ctx, variant, facing, moving, animTime, cx, footY, s
   const frame = moving ? 1 + (Math.floor(animTime * fps) % 8) : 0;
   const size = FRAME * scale;
   ctx.drawImage(c, frame * FRAME, (STU_ROW[facing] ?? 2) * FRAME, FRAME, FRAME,
+    Math.round(cx - FEET_X * scale), Math.round(footY - FEET_Y * scale), size, size);
+  return true;
+}
+
+// A student standing in the "hands held up in front of the chest" pose (the spellcast row of the LPC sheet, frame 2). Used by the pool
+// operators (pool.js), who hold a remote control there. Same arguments as drawStudent, minus the walking ones.
+export function drawStudentPose(ctx, variant, facing, cx, footY, scale, frame = 2) {
+  const c = built[variant];
+  if (!c) return false;
+  const size = FRAME * scale;
+  ctx.drawImage(c, frame * FRAME, (4 + (STU_ROW[facing] ?? 2)) * FRAME, FRAME, FRAME,
     Math.round(cx - FEET_X * scale), Math.round(footY - FEET_Y * scale), size, size);
   return true;
 }

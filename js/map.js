@@ -75,11 +75,25 @@ export function getExitHint(tx, ty) {
   return null;
 }
 
+// Zone 2 pool props (tile coordinates). The pool is x8-23, rows 11-18, ringed by the rim (row 10 / row 19, x7 / x24).
+//   sign: the "RESTRICTED AREA" board standing on the floor beside the east rim (it faces LEFT / west, towards the pool)
+//   operators: two Robotics Lab members with remote controls, one north of the pool looking south, one south of it looking north
+export const POOL_PROPS = {
+  sign: { tx: 25, ty: 12 },
+  operators: [{ tx: 14, ty: 9, facing: 'down' }, { tx: 25, ty: 14, facing: 'left' }],
+};
+
 // Thin solid walls: the silver handrail down the middle of each zone 1 stair flight is a rail, not floor, so it blocks the
 // player. It is drawn by renderer.js drawFlight() at x = tile edge - 2 (4px wide, with a 6px post at each end of the flight);
 // these rectangles must match that drawing. A flight lane is 32px wide, so the 20px player still fits either side of it.
 function buildThinWalls() {
   thinWalls = [];
+  if (zoneId === 'zone2') {                                         // the Robotics Lab test pool: the signboard and the two operators block the player (see pool.js)
+    const { sign, operators } = POOL_PROPS;
+    thinWalls.push({ x: sign.tx * TILE - 2, y: sign.ty * TILE + 15, w: TILE + 4, h: 14 });   // the board is wide and low: it blocks the width of its tile
+    for (const o of operators) thinWalls.push({ x: o.tx * TILE + 4, y: o.ty * TILE + 4, w: TILE - 8, h: TILE - 6 });
+    return;
+  }
   if (zoneId !== 'zone1') return;                                   // only zone 1 draws S tiles as railed flights
   for (let ty = 0; ty < rows; ty++) for (let tx = 1; tx < cols; tx++) {
     if (grid[ty][tx] !== 'S' || grid[ty][tx - 1] !== 'S') continue;   // the rail sits on the seam between two lanes
@@ -151,12 +165,13 @@ export function findSeat(cx, cy) {
 export const HEAD = 17;                                   // the head reaches ~17px above the hitbox
 export const FOOT = 5;                                    // the shoes reach ~5px below the hitbox
 const clearsPlayer = (tx, ty) => { const c = getTile(tx, ty); return c !== 'R' && isSolid(tx, ty); };   // every solid tile (walls, hedges and their rails, benches, the pool rim...) except the edge railings
+const clearsHead = (tx, ty) => clearsPlayer(tx, ty) && getTile(tx, ty) !== 'B';   // the head may overlap the FLAT pool rim / lawn border (so you can walk right up to it from the south), the shoes may not (no standing on it from the north)
 export function headWallBottom(x, y, w) {                // lowest pixel edge of a wall tile that the strip above the hitbox overlaps, or null
   const x0 = Math.floor(x / TILE), x1 = Math.floor((x + w - 0.01) / TILE);
   const y0 = Math.floor((y - HEAD) / TILE), y1 = Math.floor((y - 0.01) / TILE);
   let best = null;
   for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++)
-    if (clearsPlayer(tx, ty)) best = Math.max(best ?? -Infinity, (ty + 1) * TILE);
+    if (clearsHead(tx, ty)) best = Math.max(best ?? -Infinity, (ty + 1) * TILE);
   return best;
 }
 export function footWallTop(x, y, w, h) {               // top pixel edge of the highest wall tile that the strip below the hitbox overlaps, or null

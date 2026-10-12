@@ -12,6 +12,7 @@ import { skyline, drawSkyline } from './skyline.js';
 import { setVirtualUp, UP_ROWS, WATER_FILTERS } from './map.js';
 import { getFloor } from './floor.js';
 import { paintHedge, hedgeBase, buildOverlay } from './foliage.js';
+import { drawPool, poolEntities, drawSignCard, signView } from './pool.js';
 import { paintLeafMass, massBase, drawCrown } from './canopy.js';
 
 const canvas = document.getElementById('game');
@@ -656,6 +657,7 @@ function drawTile(ch, px, py, tx, ty, time) {
   }
   if (ch === '.') {
     // plain stone floor: nothing to add (the texture is already in the floor canvas)
+  } else if (ch === '~' && zoneId === 'zone2') {       // the whole test pool is painted in one piece by pool.js drawPool()
   } else if (ch === '~') {                           // moving ripple line
     ctx.fillStyle = 'rgba(255,255,255,0.25)';
     ctx.fillRect(px + 4 + Math.sin(time * 2 + tx) * 4, py + 14, 16, 3);
@@ -1096,6 +1098,7 @@ export function render(game, time) {
     for (let tx = x0; tx <= x1; tx++)
       drawTile(getTile(tx, ty), tx * TILE, ty * TILE, tx, ty, time);
   for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) if (getTile(tx, ty) === 'T') drawCrown(ctx, tx * TILE + 16, ty * TILE + 15, tx, ty, 19);   // the sitting-area trees: crowns drawn over their planters
+  if (zoneId === 'zone2') drawPool(ctx, time);       // the Robotics Lab test pool: water, robots, ripples
   if (zoneId === 'zone1') drawEscalatorNose(x0, x1, y0, y1, time);
   if (zoneId === 'zone1') drawBasementBlock(camera);   // storage-room stairwell (k / z tiles)   // the escalator well + rounded end of the escalator railing
   drawFoliage(x0, x1, y0, y1);                       // leaves poking through / over the hedge rails
@@ -1110,9 +1113,12 @@ export function render(game, time) {
   }
 
   // Draw NPC and player in order of their feet (whoever is lower on screen is drawn on top)
-  if (npc.zone !== zoneId) drawPlayer(player);        // NPC is in another zone
-  else if (player.y + player.h < npc.footY) { drawPlayer(player); drawNPC(npc, player); }
-  else { drawNPC(npc, player); drawPlayer(player); }
+  const ents = [];                                    // (zone 2 adds the pool signboard and the two operators here)
+  if (npc.zone === zoneId) ents.push({ y: npc.footY, draw: () => drawNPC(npc, player) });
+  if (zoneId === 'zone2') ents.push(...poolEntities(ctx, time));
+  ents.push({ y: player.y + player.h, draw: () => drawPlayer(player) });
+  ents.sort((a, b) => a.y - b.y);                     // stable: on a tie the player is drawn last
+  for (const e of ents) e.draw();
 
   if (debug) drawDebug(game);
   ctx.restore();
@@ -1129,6 +1135,7 @@ export function render(game, time) {
   if (fade > 0) {                                    // drawn last = covers everything
     ctx.fillStyle = `rgba(0,0,0,${fade})`; ctx.fillRect(0, 0, VW, VH);
   }
+  if (signView.active) drawSignCard(ctx, VW, VH);     // zone 2: the signboard read up close
   if (restroom.active) drawRestroomScene();           // restroom visit: fade (black for the men's, a dim for the women's) + text card
 }
 
