@@ -20,6 +20,9 @@ export class Player {
     this.sitTime = 0;                        // seconds spent sitting (so a held walk key doesn't stand you up instantly)
     this.preSit = null;                      // where we stood before sitting (we go back there when standing up)
     this.swimming = false;                   // true while in the pool (see pool.js ladder)
+    this.climbing = false;                   // true while on the pool ladder (the sprite plays the climbing row instead of walking)
+    this.climbFront = false;                 // climbing while facing the camera (the south ladder) instead of with his back to it
+    this.climbFrame = 0;                     // which of the 6 climb frames to draw (set by pool.js ladder)
     this.onStairs = false;                   // true while the feet are on a stair flight (slower, and the sprite bobs with each step)
     this.stepDist = 0;                       // pixels walked on stairs (drives the step bob: one bob per 16px = one stair step)
   }

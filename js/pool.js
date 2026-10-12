@@ -101,10 +101,18 @@ function drawPaths(ctx) {
 }
 
 // ================================================================ the steel ladder ====================================
-// A stainless-steel pool ladder on the NORTH rim, at tile x23 (the north-east corner of the pool, like the one at the right of your photo).
-// It points SOUTH: two grab rails bolted to the deck with round flanges, running over the coping and down into the water, with steps between them.
-const LADDER = { fromRight: 16, gap: 7 };                            // x = this many px left of the pool's east edge (16 = the middle of the last water column); half the distance between the rails
+// Two stainless-steel pool ladders, one on each long rim, exactly opposite each other at tile x23 (the east end of the pool, like the one at the
+// right of your photo): 'N' on the NORTH rim (points south into the water) and 'S' on the SOUTH rim (points north).
+// Each is two grab rails bolted to the deck with round flanges, running over the coping and down into the water, with steps between them.
+// Everything below is written for the NORTH ladder; the south one is the same drawing / motion mirrored top-to-bottom (see sideY + withLadder).
+const LADDER = { fromRight: 16, gap: 9, sides: ['N', 'S'] };         // x = this many px left of the pool's east edge (16 = the middle of the last water column); half the distance between the rails
 function ladderX(R) { return R.x + R.w - LADDER.fromRight; }
+const sideY = (R, side, y) => side === 'N' ? y : 2 * (R.y + R.h / 2) - y;   // a north-ladder y turned into the same spot on the given side
+function withLadder(ctx, R, side, draw) {                           // draws the north ladder; for the south side the canvas is flipped top-to-bottom around the pool's middle
+  ctx.save();
+  if (side === 'S') { ctx.translate(0, 2 * (R.y + R.h / 2)); ctx.scale(1, -1); }
+  draw(ctx, R); ctx.restore();
+}
 function drawLadderUnder(ctx, R) {                                   // the part below the surface: drawn BEFORE the water tint so it looks submerged
   const y = R.y, cx = ladderX(R), g = LADDER.gap;
   ctx.save(); ctx.lineCap = 'round';
@@ -199,7 +207,7 @@ function drawWater(ctx, time, R) {
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(floorImg, R.x, R.y);                       // 1. the pool bottom
   ctx.fillStyle = WATER.tintA; ctx.fillRect(R.x, R.y, R.w, R.h);
-  drawLadderUnder(ctx, R);                                 // the ladder's submerged part
+  for (const s of LADDER.sides) withLadder(ctx, R, s, drawLadderUnder);   // the ladders' submerged parts
 
   drawRobots(ctx, time);                                   // 2. the robots, resting a little below the surface
 
@@ -271,6 +279,105 @@ function drawWater(ctx, time, R) {
   ctx.restore();
 }
 
+// ================================================================ the overflow drain grate (west side) ================
+// Like the real pool (see your photo): along one rim, just outside the pool wall and a narrow lip of coping, runs a slotted steel drain grate.
+// If the water sloshes over the lip it runs into the grate instead of flooding the deck. It is decoration (the rim tile is solid, nobody walks on it),
+// but every few seconds a wave sloshes over the lip and a little water bursts up through the slats (also when a robot bumps that wall, or you swim
+// hard against it). To change the look: GRATE.side = 'W' (west rim) or 'E' (east rim), GRATE.off = lip width (px), GRATE.w = grate width,
+// GRATE.every = [min, max] seconds between random splashes.
+const GRATE = { side: 'W', off: 8, w: 12, every: [2.2, 6] };
+const GS = GRATE.side === 'W' ? -1 : 1;                                              // -1: the grate lies to the left of the water, +1: to the right
+let grateImg = null, grateT = 3, grateBumpT = 0;
+const gSplashes = [];    // {y, len, age, life, sp[]}   a wave over the lip (first second), then a wet film lying in the grate
+const gDrops = [];       // {x, y, z, vx, vy, vz, delay, r}   droplets flung up out of the slats (z = height above the grate)
+const gRipples = [];     // {x, y, age}                       tiny rings where a droplet lands back in the film
+const lipEdge = (R) => GS < 0 ? R.x : R.x + R.w;                                      // x of the pool wall on the grate's side
+const grateX = (R) => GS < 0 ? R.x - GRATE.off - GRATE.w : R.x + R.w + GRATE.off;     // left edge of the grate
+function buildGrate(h) {
+  const W = GRATE.w, c = document.createElement('canvas'); c.width = W; c.height = h;
+  const g = c.getContext('2d');
+  g.fillStyle = '#263036'; g.fillRect(0, 0, W, h);                                   // the dark trough underneath
+  for (let y = 2; y < h - 2; y += 3) {                                               // slats across the trough: bright top edge, grey body, dark gap
+    g.fillStyle = '#8c99a1'; g.fillRect(1, y, W - 2, 2);
+    g.fillStyle = '#cfd8dd'; g.fillRect(1, y, W - 2, 1);
+  }
+  g.fillStyle = '#b9c3c9'; g.fillRect(0, 0, 1, h); g.fillRect(W - 1, 0, 1, h);       // the steel frame along both sides
+  g.fillStyle = '#a9b4bb'; g.fillRect(0, 0, W, 2); g.fillRect(0, h - 2, W, 2);       // ...and the two ends
+  g.fillStyle = 'rgba(0,0,0,0.14)'; g.fillRect(GS < 0 ? W - 4 : 1, 2, 3, h - 4);     // the lip shades the pool side of the grate
+  return c;
+}
+function drawGrate(ctx, R) {
+  const gx = grateX(R), y0 = R.y - 2, h = R.h + 4;
+  if (!grateImg || grateImg.height !== h) grateImg = buildGrate(h);
+  ctx.save(); ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = 'rgba(0,0,0,0.16)'; ctx.fillRect(GS < 0 ? gx + GRATE.w : gx - 2, y0, 2, h);   // shadow of the grate edge on the coping
+  ctx.drawImage(grateImg, gx, y0);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(GS < 0 ? gx - 1 : gx + GRATE.w, y0, 1, h);   // bright edge of the concrete beyond
+  ctx.restore();
+}
+function spawnGrateSplash(R, y, size = 1) {                                          // size ~0.9 (small) .. 1.6 (big)
+  if (gSplashes.length > 5) return;
+  const len = rand(12, 20) * size;
+  gSplashes.push({ y, len, age: 0, life: 3.4, sp: Array.from({ length: 6 }, () => ({ dy: rand(-0.5, 0.5), x: rand(0.1, 0.9), ph: rand(0, TAU) })) });
+  addRing(lipEdge(R) - GS * 5, y, 10 + 8 * size, 0.38, 1.3);                         // the wave hits the wall
+  const gx = grateX(R), n = Math.round(rand(4, 6) * size);
+  for (let i = 0; i < n && gDrops.length < 60; i++)
+    gDrops.push({ x: gx + rand(2, GRATE.w - 2), y: y + rand(-len / 2, len / 2), z: 0, vx: rand(-7, 7), vy: rand(-9, 9), vz: rand(34, 70) * (0.8 + 0.2 * size), delay: rand(0.12, 0.5), r: rand(1, 1.8) });
+}
+function updateGrate(dt, R, swimmer) {
+  grateT -= dt;
+  if (grateT <= 0) { grateT = rand(...GRATE.every); spawnGrateSplash(R, rand(R.y + 16, R.y + R.h - 16), Math.random() < 0.25 ? 1.6 : rand(0.9, 1.2)); }
+  grateBumpT -= dt;
+  const nearWall = swimmer && (GS < 0 ? swimmer.cx < R.x + 24 : swimmer.cx > R.x + R.w - 24);
+  if (swimmer?.swimming && swimmer.moving && nearWall && grateBumpT <= 0) {          // you swim hard against that wall
+    grateBumpT = 0.8; spawnGrateSplash(R, swimmer.cy, 0.9);
+  }
+  for (const s of gSplashes) s.age += dt;
+  for (let i = gSplashes.length - 1; i >= 0; i--) if (gSplashes[i].age >= gSplashes[i].life) gSplashes.splice(i, 1);
+  for (const d of gDrops) {
+    if (d.delay > 0) { d.delay -= dt; continue; }
+    d.x += d.vx * dt; d.y += d.vy * dt; d.z += d.vz * dt; d.vz -= 170 * dt;
+    if (d.z <= 0) { d.dead = true; if (gRipples.length < 30) gRipples.push({ x: d.x, y: d.y, age: 0 }); }
+  }
+  for (let i = gDrops.length - 1; i >= 0; i--) if (gDrops[i].dead) gDrops.splice(i, 1);
+  for (const r of gRipples) r.age += dt;
+  for (let i = gRipples.length - 1; i >= 0; i--) if (gRipples[i].age > 0.4) gRipples.splice(i, 1);
+}
+function drawGrateFX(ctx, R, time) {
+  const gx = grateX(R), lipX = lipEdge(R);
+  ctx.save();
+  for (const s of gSplashes) {
+    const k = s.age / s.life;
+    if (s.age < 1.15) {                                                              // 1. the wave sloshing over the lip and into the grate, then draining back
+      const e = Math.sin(Math.PI * Math.min(1, s.age / 1.15)), front = lipX + GS * (GRATE.off + GRATE.w * 0.75) * e;
+      ctx.save(); ctx.beginPath(); ctx.rect(GS < 0 ? lipX - 60 : lipX, s.y - 40, 60, 80); ctx.clip();      // only the part outside the pool wall
+      const cx = (lipX - GS * 3 + front) / 2, rx = Math.max(0.5, Math.abs(front - lipX + GS * 3) / 2), ry = (s.len / 2) * (0.55 + 0.45 * e);
+      ctx.fillStyle = `rgba(60,150,210,${0.55 * e})`; ctx.beginPath(); ctx.ellipse(cx, s.y, rx, ry, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = `rgba(240,255,250,${0.85 * e})`; ctx.lineWidth = 1; ctx.beginPath();
+      ctx.ellipse(cx, s.y, rx, ry, 0, GS < 0 ? Math.PI / 2 : -Math.PI / 2, GS < 0 ? Math.PI * 1.5 : Math.PI / 2); ctx.stroke();   // foam at the front edge
+      ctx.restore();
+    }
+    const wet = Math.min(1, s.age / 0.25) * Math.pow(1 - k, 1.3);                  // 2. a wet film lying on the slats, slowly draining away
+    ctx.fillStyle = `rgba(60,150,205,${0.30 * wet})`; rr(ctx, gx, s.y - s.len / 2, GRATE.w, s.len, 3); ctx.fill();
+    for (const p of s.sp) {                                                           // glints on the wet slats
+      const a = Math.max(0, Math.sin(time * 5 + p.ph)) * wet;
+      if (a < 0.2) continue;
+      ctx.fillStyle = `rgba(255,255,255,${0.8 * a})`; ctx.fillRect(Math.round(gx + 1 + p.x * (GRATE.w - 3)), Math.round(s.y + p.dy * s.len), 1, 1);
+    }
+  }
+  for (const r of gRipples) {                                                         // tiny rings where droplets fall back
+    const k = r.age / 0.4;
+    ctx.strokeStyle = `rgba(235,255,248,${0.7 * (1 - k)})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(r.x, r.y, 1 + k * 4, 0.6 + k * 2, 0, 0, TAU); ctx.stroke();
+  }
+  for (const d of gDrops) {                                                           // droplets: a small shadow on the grate, the drop higher up
+    if (d.delay > 0) continue;
+    ctx.fillStyle = `rgba(0,30,50,${Math.max(0, 0.28 - d.z * 0.006)})`; ctx.fillRect(Math.round(d.x), Math.round(d.y), 1, 1);
+    ctx.fillStyle = 'rgba(225,246,255,0.95)'; ctx.beginPath(); ctx.arc(d.x, d.y - d.z * 0.7, d.r, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(80,170,225,0.8)'; ctx.fillRect(Math.round(d.x), Math.round(d.y - d.z * 0.7 + d.r * 0.4), 1, 1);
+  }
+  ctx.restore();
+}
+
 // ================================================================ the robots ==========================================
 // Each robot: moves slowly along its heading `ang`. Now and then it picks a new heading (or hovers for a second). When it touches a
 // wall it picks a heading that is the bounce of its old one (plus a random tilt) and swings round to it, slowing down while it turns.
@@ -304,6 +411,7 @@ export function updatePool(dt, swimmer = null) {
   }
   for (const r of rings) r.age += dt;
   for (let i = rings.length - 1; i >= 0; i--) if (rings[i].age >= rings[i].life) rings.splice(i, 1);
+  updateGrate(dt, R, swimmer);                              // the drain grate on the west rim: random sloshes and splashes
   for (const b of bubbles) { b.age += dt; b.x += b.vx * dt; b.y += b.vy * dt; }
   for (let i = bubbles.length - 1; i >= 0; i--) if (bubbles[i].age >= bubbles[i].life) bubbles.splice(i, 1);
 
@@ -338,6 +446,7 @@ export function updatePool(dt, swimmer = null) {
       rb.target = Math.atan2(by, bx); rb.hover = 0; rb.wander = rand(3, 6); rb.cd = 1.2;
       rb.speed *= 0.35;
       addRing(nx + (hx ? -hx * 6 : 0), ny + (hy ? -hy * 6 : 0), 30 * rb.scale + 6, 0.55, 2.6);   // a bigger splash where it touched
+      if (hx === (GS < 0 ? 1 : -1) && Math.random() < 0.8) spawnGrateSplash(R, ny, 1.4);          // bumped the grate's wall: the wave runs over the lip into the grate
     }
     rb.x = nx; rb.y = ny;
 
@@ -430,7 +539,8 @@ export function drawPool(ctx, time) {
   prepareVariants();
   drawPaths(ctx);                                          // the two concrete walkways, on top of the slab floor
   drawWater(ctx, time, R);
-  drawLadderTop(ctx, R);                                   // the steel rails over the north rim, on top of the water and the rim tiles
+  drawGrate(ctx, R); drawGrateFX(ctx, R, time);            // the overflow drain grate along the west rim, and the water that splashes into it
+  for (const s of LADDER.sides) withLadder(ctx, R, s, drawLadderTop);     // the steel rails over the north and south rims, on top of the water and the rim tiles
 }
 
 // ================================================================ the signboard =======================================
@@ -617,43 +727,91 @@ export const poolAccess = {
   allowed: true,
   deniedLines: ["This ladder leads down into the Robotics Lab's test tank.", "Better not go in right now."],
 };
-// 'in' = on the deck beside the ladder (can climb down) | 'out' = in the water near the ladder (can climb out) | null
+// 'in' = on the deck beside a ladder (can climb down) | 'out' = in the water near a ladder (can climb out) | null.  nearSide remembers WHICH ladder ('N' / 'S').
+let nearSide = 'N';
 export function nearLadder(p) {
   if (zoneId !== 'zone2') return null;
   const R = poolRect(); if (!R) return null;
   if (Math.abs(p.cx - ladderX(R)) > 26) return null;
-  if (p.swimming) return p.cy < R.y + 48 ? 'out' : null;
-  return p.cy > R.y - 70 && p.cy < R.y - 12 ? 'in' : null;
+  for (const side of LADDER.sides) {
+    const cy = sideY(R, side, p.cy);                                  // the player's y as seen from the north ladder
+    const r = p.swimming ? (cy < R.y + 48 ? 'out' : null) : (cy > R.y - 70 && cy < R.y - 12 ? 'in' : null);
+    if (r) { nearSide = side; return r; }
+  }
+  return null;
 }
 const ease = (k) => k * k * (3 - 2 * k);
 const placeCentre = (p, cx, cy) => { p.x = cx - p.w / 2; p.y = cy - p.h / 2; };
+// The climb is a short script of phases, so it reads like a real person using a pool ladder:
+//   in : walk to the rails -> turn round and grab them -> climb down, hand over hand -> let go in the water, face the pool
+//   out: swim to the foot -> grab the rails -> climb up -> let go and step off onto the deck
+// While climbing, the sprite plays the climbing row (sprites.js) and the frame follows the DISTANCE travelled (not the clock), so the hands and
+// feet never slide; the motion has only a gentle start and stop, like a steady climb, not a stroll.
+// The climb starts exactly when the hands reach the top of the rails and ends exactly when they leave them: the raised hands are ~25px above
+// the feet, so the feet are at CLIMB_Y.top (just at the water's edge) when the hands are on the top of the rails, and CLIMB_Y.bottom when they reach the last step.
+const CLIMB_SECS = 1.4;            // time for the climb itself (34px of ladder)
+const CLIMB_PX_PER_CYCLE = 17;     // px climbed per full 6-frame cycle (one hand + one foot on each side): 2 cycles over the whole ladder
+// body-centre y of the climber at the top / bottom of the climb, relative to the pool's north edge (the south ladder is mirrored). The north climber
+// faces the wall with his back to us and his hands are ~25px above his feet; the south climber faces us holding the rails low (~9px above his feet),
+// so he stands higher up the ladder for his hands to be on the same part of the rails.
+// `fin` = where he ends up in the water after letting go (waist-deep, as seen from the north ladder).
+const CLIMB_Y = { N: { top: -8, bottom: 26, fin: 26 }, S: { top: -23, bottom: 19, fin: 28 } };
+const climbEase = (k) => 0.55 * k + 0.45 * ease(k);
 export const ladder = {
-  active: false, dir: 'in', t: 0, pts: [], durs: [], splashed: false,
-  start(dir, p) {
-    const R = poolRect(), lx = ladderX(R);
-    const top = { x: lx, y: R.y - 42 }, bottom = { x: lx, y: R.y + 26 }, from = { x: p.cx, y: p.cy };
-    this.active = true; this.dir = dir; this.t = 0; this.splashed = false;
-    if (dir === 'in') { this.pts = [from, top, bottom, bottom]; this.durs = [0.4, 1.15, 0.3]; }                         // walk to the top rung, climb down backwards, settle
-    else { this.pts = [from, bottom, top, { x: lx, y: R.y - 58 }]; this.durs = [0.35, 1.15, 0.35]; swim.on = true; }    // swim to the foot, climb up, step onto the deck
-    p.moving = false; p.animTime = 0;
+  active: false, dir: 'in', side: 'N', t: 0, phases: [], splashed: false,
+  start(dir, p, side = nearSide) {
+    const R = poolRect(), lx = ladderX(R), P = (y) => ({ x: lx, y: sideY(R, side, y) });
+    const top = P(R.y + CLIMB_Y[side].top), bottom = P(R.y + CLIMB_Y[side].bottom), from = { x: p.cx, y: p.cy };
+    this.active = true; this.dir = dir; this.side = side; this.t = 0; this.splashed = false;
+    if (dir === 'in') this.phases = [
+      { k: 'walk',  a: from, b: top,    d: 0.45 },                           // walk to the water's edge between the rails
+      { k: 'hold',  a: top,  b: top,    d: 0.25 },                           // turn round and take hold of the rails
+      { k: 'climb', a: top,  b: bottom, d: CLIMB_SECS },                     // lower yourself down, hand over hand
+      { k: 'hold',  a: bottom, b: P(R.y + CLIMB_Y[side].fin), d: 0.30, face: side === 'N' ? 'down' : 'up' },   // let go, turn to the pool (and drop the last bit into the water)
+    ];
+    else { swim.on = true; this.phases = [
+      { k: 'walk',  a: from, b: bottom, d: 0.35 },                           // swim to the foot of the ladder
+      { k: 'hold',  a: bottom, b: bottom, d: 0.25 },                         // reach up and grab the rails
+      { k: 'climb', a: bottom, b: top,  d: CLIMB_SECS },                     // climb up, hand over hand
+      { k: 'walk',  a: top,  b: P(R.y - 58), d: 0.45 },                      // let go and step off onto the deck
+    ]; }
+    p.moving = false; p.animTime = 0; p.climbing = false; p.climbFrame = 0; p.climbFront = side === 'S';
   },
   update(dt, p) {
     const R = poolRect(); this.t += dt;
-    let t = this.t, seg = 0;
-    while (seg < this.durs.length - 1 && t >= this.durs[seg]) { t -= this.durs[seg]; seg++; }
-    const k = Math.min(1, t / this.durs[seg]), A = this.pts[seg], B = this.pts[seg + 1], e = ease(k);
+    let t = this.t, i = 0;
+    while (i < this.phases.length - 1 && t >= this.phases[i].d) { t -= this.phases[i].d; i++; }
+    const ph = this.phases[i], k = Math.min(1, t / ph.d), A = ph.a, B = ph.b;
+    const e = ph.k === 'climb' ? climbEase(k) : ease(k);
     const cx = A.x + (B.x - A.x) * e, cy = A.y + (B.y - A.y) * e;
     placeCentre(p, cx, cy);
-    const climbing = seg === 1, walking = this.dir === 'in' ? seg < 2 : true;
-    p.facing = climbing || (this.dir === 'out' && seg === 2) ? 'up' : (Math.abs(B.x - A.x) > Math.abs(B.y - A.y) ? (B.x < A.x ? 'left' : 'right') : (B.y < A.y ? 'up' : 'down'));
-    p.moving = walking && k < 1 && (B.x !== A.x || B.y !== A.y); p.animTime = p.moving ? p.animTime + dt * (climbing ? 0.5 : 1) : 0;
-    if (!this.splashed && climbing && (this.dir === 'in' ? cy + 10 > R.y : cy + 10 < R.y + 6)) {   // the feet cross the waterline
-      this.splashed = true; addRing(cx, R.y + 8, 26, 0.6, 2.2); addRing(cx, R.y + 8, 14, 0.5, 1.5);
+    p.climbing = ph.k === 'climb' || (ph.k === 'hold' && !ph.face);          // gripping the rails (also while turning round to take hold of them)
+    if (ph.k === 'climb') {
+      const f = Math.floor(Math.abs(cy - A.y) / CLIMB_PX_PER_CYCLE * 6);      // frames advance with the px climbed
+      p.climbFrame = this.dir === 'in' ? (6 - (f % 6)) % 6 : f % 6;           // climbing DOWN the cycle runs backwards (the hand that reached up now reaches down)
+      p.facing = this.side === 'N' ? 'up' : 'down'; p.moving = false; p.animTime = 0;   // north ladder: back to us; south ladder: facing us
+    } else if (ph.k === 'hold') {
+      p.climbFrame = 0; p.moving = false; p.animTime = 0;
+      p.facing = ph.face ?? (this.side === 'N' ? 'up' : 'down');
+    } else {                                                                  // walk / swim
+      p.climbFrame = 0;
+      p.facing = Math.abs(B.x - A.x) > Math.abs(B.y - A.y) ? (B.x < A.x ? 'left' : 'right') : (B.y < A.y ? 'up' : 'down');
+      p.moving = k < 1 && (B.x !== A.x || B.y !== A.y); p.animTime = p.moving ? p.animTime + dt : 0;
     }
-    if (this.t >= this.durs.reduce((a, b) => a + b, 0)) {                                         // done
-      this.active = false; p.moving = false; p.animTime = 0;
-      if (this.dir === 'in') { p.swimming = true; swim.on = true; p.facing = 'down'; placeCentre(p, B.x, B.y); addRing(B.x, R.y + 26, 28, 0.45, 2.4); }
-      else { p.swimming = false; swim.on = false; p.facing = 'up'; placeCentre(p, B.x, B.y); }
+    const cyN = sideY(R, this.side, cy);                                      // as seen from the north ladder
+    if (!this.splashed && ph.k === 'climb' && (this.dir === 'in' ? cyN + 10 > R.y : cyN + 10 < R.y + 6)) {   // the feet cross the waterline
+      this.splashed = true;
+      const ry = this.side === 'N' ? R.y + 8 : R.y + R.h - 8;
+      addRing(cx, ry, 26, 0.6, 2.2); addRing(cx, ry, 14, 0.5, 1.5);
+    }
+    if (this.t >= this.phases.reduce((s, q) => s + q.d, 0)) {                                         // done
+      const end = this.phases[this.phases.length - 1].b, N = this.side === 'N';
+      this.active = false; p.moving = false; p.animTime = 0; p.climbing = false; p.climbFrame = 0; p.climbFront = false;
+      placeCentre(p, end.x, end.y);
+      if (this.dir === 'in') {
+        p.swimming = true; swim.on = true; p.facing = N ? 'down' : 'up';
+        addRing(end.x, N ? R.y + 26 : R.y + R.h - 26, 28, 0.45, 2.4);
+      } else { p.swimming = false; swim.on = false; p.facing = N ? 'up' : 'down'; }
     }
   },
 };
@@ -662,7 +820,8 @@ export const ladder = {
 export function swimDepth(p) {
   if (zoneId !== 'zone2' || !(p.swimming || ladder.active)) return 0;
   const R = poolRect(); if (!R) return 0;
-  return clamp(p.y + p.h - R.y, 0, 17);
+  const footY = p.y + p.h, w = clamp(Math.min(footY - R.y, R.y + R.h - footY), 0, 17);   // depth below the nearer (north or south) rim, so the south ladder works too
+  return w < 3 ? 0 : w;                                                 // a feet-just-at-the-edge sliver of water would look like a glitch on the dry deck
 }
 // Draws the player standing in the water: the body above the waterline as usual, the legs below it faint and bluish, rings round the waist.
 export function drawSwimmer(ctx, p, wet, time) {

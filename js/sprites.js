@@ -6,6 +6,30 @@ const FRAME = 64;                                   // frame size in the sheet
 const WALK_ROW = { up: 8, left: 9, down: 10, right: 11 };
 const SIT_ROW = { up: 30, left: 31, down: 32, right: 33 };   // sitting rows of the PLAYER sheet
 const SIT_FRAME = 2;                                // frame 2 = seated on a bench/chair (frames 0-1 sit on the ground)
+const CLIMB_ROW = 21;                               // climbing row of the PLAYER sheet: seen from behind, 6 frames (hand over hand, foot over foot)
+const CLIMB_FRAMES = 6;
+// The sheet has no climbing row seen from the FRONT (needed for the south pool ladder, where you face the camera), so we build one once from
+// frames that exist: legs from the walk-down row, head + torso from a spellcast frame, and each ARM from a spellcast frame with the arm held low
+// (fists at the waist, like gripping the rails of a ladder you are climbing down). One arm is out a little more than the other and they swap
+// half way round the cycle (hand over hand) while the legs step one after the other.
+let frontClimbCanvas = null;
+function buildFrontClimb(sheet) {
+  const CUT = 42, X0 = 22, X1 = 42, ARM_Y = 52;                            // CUT = waist line; X0..X1 = body (arms are outside it); ARM_Y = how far down the arms are copied
+  const OUT = 3, IN = 1;                                                    // spellcast frames: 3 = hand a little out to the side, 1 = elbow tucked in
+  const c = document.createElement('canvas'); c.width = FRAME * CLIMB_FRAMES; c.height = FRAME;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  for (let f = 0; f < CLIMB_FRAMES; f++) {
+    g.save(); g.translate(f * FRAME, 0);
+    const leg = 1 + Math.floor(f * 8 / CLIMB_FRAMES);
+    g.drawImage(sheet, leg * FRAME + X0, 10 * FRAME + CUT, X1 - X0, FRAME - CUT, X0, CUT, X1 - X0, FRAME - CUT);       // legs
+    g.drawImage(sheet, IN * FRAME + X0, 2 * FRAME, X1 - X0, CUT, X0, 0, X1 - X0, CUT);                                   // head + torso
+    const [L, R] = f < CLIMB_FRAMES / 2 ? [OUT, IN] : [IN, OUT];
+    g.drawImage(sheet, L * FRAME, 2 * FRAME, X0, ARM_Y, 0, 0, X0, ARM_Y);                                                // left arm
+    g.drawImage(sheet, R * FRAME + X1, 2 * FRAME, FRAME - X1, ARM_Y, X1, 0, FRAME - X1, ARM_Y);                          // right arm
+    g.restore();
+  }
+  return c;
+}
 const WALK_FPS = 12;                                // walking animation speed
 const FEET_X = 32, FEET_Y = 56;                     // where the feet are inside a 64x64 frame
 const SCALE = 0.75;   // 1 = original 64px, 0.5 = 32px. 
@@ -24,12 +48,19 @@ export function drawCharacter(ctx, who, which = 'player') {
   const sheet = sheets[which];
   if (!sheet.complete || sheet.naturalWidth === 0) return false;
   const sit = who.sitting && which === 'player';
-  const frame = sit ? SIT_FRAME : who.moving ? 1 + (Math.floor(who.animTime * WALK_FPS) % 8) : 0;
-  const row = sit ? (SIT_ROW[who.facing] ?? SIT_ROW.down) : (WALK_ROW[who.facing] ?? WALK_ROW.down);
+  const climb = who.climbing && which === 'player';   // on the pool ladder (pool.js sets climbing + climbFrame)
+  const frame = climb ? ((who.climbFrame | 0) % CLIMB_FRAMES + CLIMB_FRAMES) % CLIMB_FRAMES
+    : sit ? SIT_FRAME : who.moving ? 1 + (Math.floor(who.animTime * WALK_FPS) % 8) : 0;
+  const row = climb ? CLIMB_ROW : sit ? (SIT_ROW[who.facing] ?? SIT_ROW.down) : (WALK_ROW[who.facing] ?? WALK_ROW.down);
   const footY = who.footY ?? (who.y + who.h);       // players use their hitbox bottom
   const size = FRAME * SCALE;                       // drawn size on screen
   const dx = Math.round(who.cx - FEET_X * SCALE);   // feet stay at the bottom-center
   const dy = Math.round(footY - FEET_Y * SCALE);
+  if (climb && who.climbFront) {                    // climbing while facing us (south pool ladder)
+    frontClimbCanvas ??= buildFrontClimb(sheet);
+    ctx.drawImage(frontClimbCanvas, frame * FRAME, 0, FRAME, FRAME, dx, dy, size, size);
+    return true;
+  }
   ctx.drawImage(sheet, frame * FRAME, row * FRAME, FRAME, FRAME, dx, dy, size, size);
   return true;
 }
