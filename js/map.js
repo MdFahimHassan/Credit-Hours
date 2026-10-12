@@ -64,7 +64,9 @@ export function getTile(tx, ty) {
   if (tx < 0 || ty < 0 || tx >= cols || ty >= rows) return '#'; // outside = wall
   return grid[ty][tx];
 }
-export const isSolid = (tx, ty) => '#RLlAfdDvEFB~MGKCTWHYZJQaoc12345678qmkej'.includes(getTile(tx, ty));   // H = hedge, Y = bush mound, Z = tree, J = gym door, Q = gym poster wall, c = pillar, 1-6 = amphitheatre tiers, m = flat base slab under the tiers, q = hedge semi-wall (all solid)
+export const swim = { on: false };   // true while the player is in the zone 2 pool: the water ('~') is then open to him (the rim 'B' stays solid, so the steel ladder is the only way in or out)
+const SOLID_TILES = '#RLlAfdDvEFB~MGKCTWHYZJQaoc12345678qmkej';   // H = hedge, Y = bush mound, Z = tree, J = gym door, Q = gym poster wall, c = pillar, 1-6 = amphitheatre tiers, m = flat base slab under the tiers, q = hedge semi-wall (all solid)
+export const isSolid = (tx, ty) => { const c = getTile(tx, ty); return c === '~' ? !swim.on : SOLID_TILES.includes(c); };
 
 // Exit info for a tile of the current zone (or null)
 export const getExit = (tx, ty) => ZONES[zoneId].exits?.[tx + ',' + ty] ?? null;

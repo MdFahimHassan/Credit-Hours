@@ -291,6 +291,12 @@ export function buildOverlay(opt) {
 // 3. hanging vines (used by skyline.js, drawn in the skyline's local frame: x = along the edge = world y, y = away from the edge)
 // ---------------------------------------------------------------------------------------------
 const vineCache = {};
+// (*) how the hanging vines behave. They hang STRAIGHT DOWN the face of the building (gravity wins), so seen from above they only poke a short way
+//     past the edge. The wind just makes them sway a little.
+const VINE_MAX = 40;        // (*) px: longest normal strand past the edge (the odd trailer can be a bit longer, see below)
+const VINE_SWAY = 1.0;      // (*) 0 = hanging dead still, 1 = gentle breeze, 2+ = windy
+const shade = (hex, k) => '#' + [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('');   // k < 1 = darker
+
 export function vineStrands(zoneId, side) {
   const key = zoneId + '|' + side;
   if (vineCache[key]) return vineCache[key];
@@ -299,47 +305,63 @@ export function vineStrands(zoneId, side) {
   const r = () => hash(seed++, 77, 4000);
   for (const [a, b] of ranges) {
     const u0 = a * TILE, u1 = (b + 1) * TILE;
-    let u = u0 + 5;
-    while (u < u1 - 5) {
+    let u = u0 + 4;
+    while (u < u1 - 4) {
       const roll = r();
-      const kind = roll < 0.34 ? 'curtain' : roll < 0.80 ? 'single' : 'tuft';           // dense curtain / lone trailing vine / short bushy tuft
+      const kind = roll < 0.40 ? 'curtain' : roll < 0.82 ? 'single' : 'tuft';           // dense curtain / lone trailing vine / short bushy tuft
       const n = kind === 'curtain' ? 3 + Math.floor(r() * 3) : kind === 'single' ? 1 : 2 + Math.floor(r() * 2);
-      const base = kind === 'curtain' ? 45 + r() * 75 : kind === 'single' ? 22 + r() * 85 : 10 + r() * 22;
+      const base = kind === 'curtain' ? 20 + r() * 16 : kind === 'single' ? 12 + r() * 20 : 6 + r() * 8;
+      const trailer = kind === 'single' && r() < 0.18;                                    // now and then one long strand that has grown further down the wall
       for (let i = 0; i < n; i++) {
-        const len = Math.max(8, base * (0.6 + r() * 0.5));
-        out.push({ u: Math.min(u1 - 3, u + i * (3 + r() * 4)), len, ph: r() * 6.28, amp: 1.5 + r() * 3, thick: kind === 'tuft' ? 1.3 : 1 + r() * 0.8,
-                   gap: 5 + r() * 4, sz: kind === 'tuft' ? 3.4 + r() * 1.4 : 2.3 + r() * 1.3, lean: (r() - 0.5) * 3, big: kind !== 'curtain' && r() < 0.5 });
+        const len = trailer ? VINE_MAX + 6 + r() * 12 : Math.min(VINE_MAX, Math.max(6, base * (0.7 + r() * 0.45)));
+        out.push({ u: Math.min(u1 - 3, u + i * (2.5 + r() * 3)), len, ph: r() * 6.28, amp: 0.5 + r() * 1.0, thick: kind === 'tuft' ? 1.4 : 1.1 + r() * 0.8,
+                   gap: 3.6 + r() * 2.4, sz: kind === 'tuft' ? 3.4 + r() * 1.4 : 2.6 + r() * 1.4, lean: (r() - 0.5) * 1.6, big: kind !== 'curtain' && r() < 0.35 });
       }
-      u += (kind === 'curtain' ? n * 5 : 0) + 11 + r() * 22;
+      u += (kind === 'curtain' ? n * 3.5 : 0) + 5 + r() * 12;                              // closer together than before: a continuous fringe, not a few loose strings
     }
-    for (let x = u0; x < u1; x += 3 + r() * 3)               // the leafy lip of the hedge the vines grow from
-      lip.push({ u: x, d: 1 + r() * 8, s: 3 + r() * 2.4, rot: r() * 6.28, col: pick(LEAF, r()), hi: r() < 0.3 });
+    for (let x = u0; x < u1; x += 2.5 + r() * 2.5)             // the leafy lip of the hedge the vines grow from: two staggered rows so it reads as a thick overhang
+      lip.push({ u: x, d: 1 + r() * 10, s: 3.2 + r() * 2.6, rot: r() * 6.28, col: pick(LEAF, r()), hi: r() < 0.25 });
   }
   out.lip = lip;
+  out.span = ranges.map(([a, b]) => [a * TILE, (b + 1) * TILE]);
   return (vineCache[key] = out);
 }
 
 export function drawVines(g, strands, time) {
+  // contact shadow: the foliage shades the wall under it, which seats the vines against the building instead of leaving them floating over the view
+  for (const [u0, u1] of strands.span ?? []) {
+    const sg = g.createLinearGradient(0, 0, 0, 22);
+    sg.addColorStop(0, 'rgba(20,32,18,0.42)'); sg.addColorStop(1, 'rgba(20,32,18,0)');
+    g.fillStyle = sg; g.fillRect(u0, 0, u1 - u0, 22);
+  }
   for (const s of strands) {
-    const sway = (d) => Math.sin(time * 1.25 + s.ph + d * 0.045) * s.amp * Math.pow(d / s.len, 0.9) + Math.sin(time * 0.5 + s.u * 0.012) * 1.4 * (d / s.len) + s.lean * (d / s.len);
-    g.strokeStyle = '#2c5a2c'; g.lineWidth = s.thick; g.lineJoin = 'round';
+    // gravity first: the strand drops straight down; wind adds a small, slow sideways drift that grows towards the free end
+    const sway = (d) => { const t = Math.pow(d / s.len, 1.4); return (Math.sin(time * 0.9 + s.ph + d * 0.06) * s.amp * VINE_SWAY + Math.sin(time * 0.37 + s.u * 0.02) * 0.5 * VINE_SWAY) * t + s.lean * t; };
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    g.strokeStyle = 'rgba(15,28,14,0.30)'; g.lineWidth = s.thick + 1.2;                // soft shadow strand, pushed down + sideways
+    g.beginPath(); g.moveTo(s.u + 1.5, 1);
+    for (let d = 4; d < s.len; d += 4) g.lineTo(s.u + 1.5 + sway(d), d + 1.5);
+    g.lineTo(s.u + 1.5 + sway(s.len), s.len + 1.5); g.stroke();
+    g.strokeStyle = '#2c5a2c'; g.lineWidth = s.thick;
     g.beginPath(); g.moveTo(s.u, 0);
     for (let d = 4; d < s.len; d += 4) g.lineTo(s.u + sway(d), d);
     g.lineTo(s.u + sway(s.len), s.len); g.stroke();
+    g.lineCap = 'butt';
     let side = 1;
     for (let d = s.gap; d < s.len - 2; d += s.gap, side = -side) {                     // leaves alternate left / right down the strand
-      const x = s.u + sway(d), sz = s.sz * (1 - 0.25 * (d / s.len));
-      ivyLeaf(g, x + side * sz * 0.8, d, sz, side * 0.9 + Math.sin(time * 1.6 + d) * 0.12, pick(LEAF, hash(s.u, d, 4100)), hash(s.u, d, 4200) < 0.35 ? '#a6dca8' : null);
+      const x = s.u + sway(d), k = d / s.len, sz = s.sz * (1 - 0.2 * k);
+      const col = shade(pick(LEAF, hash(s.u, d, 4100)), 1 - 0.38 * k);                 // the lower part of the vine is deeper in the shadow of the wall
+      ivyLeaf(g, x + side * sz * 0.75, d, sz, side * 0.9 + Math.sin(time * 1.1 + d) * 0.07, col, hash(s.u, d, 4200) < 0.35 * (1 - k) ? '#a6dca8' : null);
     }
     const tx = s.u + sway(s.len);                                                      // the tip: a small bunch of leaves
-    ivyLeaf(g, tx - 1.5, s.len, s.sz * 0.9, 0.5, '#388e3c', null); ivyLeaf(g, tx + 1.5, s.len + 1, s.sz * 0.9, -0.5, '#43a047', null);
-    if (s.big) pointLeaf(g, tx, s.len, s.sz * 3.2, s.sz * 0.9, Math.PI / 2 + Math.sin(time * 1.3 + s.ph) * 0.18, '#3f9a47', '#8bd18f');   // bigger drooping leaf
+    ivyLeaf(g, tx - 1.5, s.len, s.sz * 0.9, 0.5, '#2b7330', null); ivyLeaf(g, tx + 1.5, s.len + 1, s.sz * 0.9, -0.5, '#2f7a35', null);
+    if (s.big) pointLeaf(g, tx, s.len, s.sz * 2.4, s.sz * 0.85, Math.PI / 2 + Math.sin(time * 0.9 + s.ph) * 0.07, '#35853d', '#7fc384');   // a bigger leaf hanging straight down
   }
 }
 
 export function drawVineLip(g, strands) {                       // call AFTER drawVines so the lip covers where the strands start
   for (const l of strands.lip ?? []) {
-    g.fillStyle = 'rgba(0,0,0,0.18)'; g.beginPath(); g.ellipse(l.u + 1, l.d + 1.5, l.s, l.s * 0.75, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = 'rgba(0,0,0,0.22)'; g.beginPath(); g.ellipse(l.u + 1, l.d + 2, l.s, l.s * 0.75, 0, 0, Math.PI * 2); g.fill();
     ivyLeaf(g, l.u, l.d, l.s, l.rot, l.col, l.hi ? '#a6dca8' : null);
   }
 }

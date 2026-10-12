@@ -12,7 +12,7 @@ import { skyline, drawSkyline } from './skyline.js';
 import { setVirtualUp, UP_ROWS, WATER_FILTERS } from './map.js';
 import { getFloor } from './floor.js';
 import { paintHedge, hedgeBase, buildOverlay } from './foliage.js';
-import { drawPool, poolEntities, drawSignCard, signView } from './pool.js';
+import { drawPool, poolEntities, drawSignCard, signView, swimDepth, drawSwimmer } from './pool.js';
 import { paintLeafMass, massBase, drawCrown } from './canopy.js';
 
 const canvas = document.getElementById('game');
@@ -154,31 +154,59 @@ function drawFoliage(x0, x1, y0, y1) {                        // stamp the visib
 // Light speckled concrete seat with a darker front face, like the benches in the photos.
 // T tiles sit in the middle of the bench ring: a dark grey tapered planter box with a tree growing out of it.
 const isBenchPart = (x, y) => { const c = getTile(x, y); return c === 'C' || c === 'T'; };
+const BENCH_R = 15;                                                                       // (*) px: radius of the rounded outer corners of a bench ring (tile = 32)
+// rounded-rectangle path with a separate radius per corner: r = [top-left, top-right, bottom-right, bottom-left]
+function roundRectPath(x, y, w, h, r) {
+  const [tl, tr, br, bl] = r;
+  ctx.beginPath();
+  ctx.moveTo(x + tl, y);
+  ctx.lineTo(x + w - tr, y);       if (tr) ctx.arcTo(x + w, y, x + w, y + tr, tr);   else ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + h - br);   if (br) ctx.arcTo(x + w, y + h, x + w - br, y + h, br); else ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x + bl, y + h);       if (bl) ctx.arcTo(x, y + h, x, y + h - bl, bl);   else ctx.lineTo(x, y + h);
+  ctx.lineTo(x, y + tl);           if (tl) ctx.arcTo(x, y, x + tl, y, tl);           else ctx.lineTo(x, y);
+  ctx.closePath();
+}
 function drawBench(px, py, tx, ty) {
   const n = isBenchPart(tx, ty - 1), s = isBenchPart(tx, ty + 1), w = isBenchPart(tx - 1, ty), e = isBenchPart(tx + 1, ty);
   const x0 = w ? 0 : 1, x1 = e ? TILE : TILE - 1, y0 = n ? 0 : 1, yb = s ? TILE : TILE - 6;
-  ctx.fillStyle = '#c9cccd'; ctx.fillRect(px + x0, py + y0, x1 - x0, yb - y0);           // seat top
+  const X = px + x0, Y = py + y0, W = x1 - x0, H = yb - y0;
+  // a corner is rounded only where the ring sticks out in BOTH directions (a real outer corner), so the tiles of a ring still join up seamlessly
+  const r = [!n && !w ? BENCH_R : 0, !n && !e ? BENCH_R : 0, !s && !e ? BENCH_R : 0, !s && !w ? BENCH_R : 0];
+  if (!s) {                                                                               // darker front face + base shadow: the same rounded outline, pushed down
+    ctx.fillStyle = '#6f7477'; roundRectPath(X, Y, W, H + 5, [0, 0, r[2], r[3]]); ctx.fill();
+    ctx.fillStyle = '#9da1a3'; roundRectPath(X, Y, W, H + 4, [0, 0, r[2], r[3]]); ctx.fill();
+  }
+  ctx.save();
+  roundRectPath(X, Y, W, H, r); ctx.clip();                                               // everything on the seat top is clipped to the rounded outline
+  ctx.fillStyle = '#c9cccd'; ctx.fillRect(X, Y, W, H);                                    // seat top
   for (let i = 0; i < 8; i++) {                                                           // concrete speckle
     ctx.fillStyle = i % 2 ? '#aeb2b4' : '#dfe1e2';
     ctx.fillRect(px + 2 + Math.floor(rnd(tx, ty, i) * (TILE - 5)), py + 2 + Math.floor(rnd(tx, ty, i + 30) * (yb - 4)), 1, 1);
   }
-  if (!n) { ctx.fillStyle = '#e1e3e4'; ctx.fillRect(px + x0, py + y0, x1 - x0, 2); }      // lit top lip
-  if (!w) { ctx.fillStyle = '#dfe1e2'; ctx.fillRect(px + x0, py + y0, 1, yb - y0); }
-  if (!e) { ctx.fillStyle = '#a9adaf'; ctx.fillRect(px + x1 - 1, py + y0, 1, yb - y0); }
-  if (!s) {                                                                               // darker front face + base shadow
-    ctx.fillStyle = '#9da1a3'; ctx.fillRect(px + x0, py + yb, x1 - x0, 4);
-    ctx.fillStyle = '#6f7477'; ctx.fillRect(px + x0 + 1, py + yb + 4, x1 - x0 - 2, 1);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'butt';                                           // edge light, only along the OUTER edges (stroked along the curve; clipped to the seat so half the stroke shows)
+  const [rTL, rTR, rBR] = r, XR = X + W, YB = Y + H;
+  if (!w) { ctx.strokeStyle = '#dfe1e2'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X, YB - r[3]); ctx.lineTo(X, Y + rTL); ctx.stroke(); }                      // lit left side
+  if (!e) { ctx.strokeStyle = '#a9adaf'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(XR, Y + rTR); ctx.lineTo(XR, YB - rBR); ctx.stroke(); }                     // shaded right side
+  if (!n) {                                                                               // lit top lip (2px), carried round the two top corners
+    ctx.strokeStyle = '#e1e3e4'; ctx.lineWidth = 4; ctx.beginPath();
+    if (rTL) { ctx.moveTo(X, Y + rTL); ctx.arcTo(X, Y, X + rTL, Y, rTL); } else ctx.moveTo(X, Y);
+    ctx.lineTo(XR - rTR, Y);
+    if (rTR) ctx.arcTo(XR, Y, XR, Y + rTR, rTR); else ctx.lineTo(XR, Y);
+    ctx.stroke();
   }
+  ctx.restore();
 }
 function drawPlanter(px, py, tx, ty) {
   drawBench(px, py, tx, ty);                                                              // the seat continues under the planter
   const isT = (x, y) => getTile(x, y) === 'T';
   const n = isT(tx, ty - 1), s = isT(tx, ty + 1);
   const x0 = px + 3, x1 = px + TILE - 3, y0 = py + (n ? 0 : 2), y1 = py + (s ? TILE : TILE - 2);
-  ctx.fillStyle = '#6a6c72'; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);                      // box body
-  if (!n) { ctx.fillStyle = '#868890'; ctx.fillRect(x0, y0, x1 - x0, 2); }                // lit rim
-  if (!s) { ctx.fillStyle = '#4d4f55'; ctx.fillRect(x0, y1 - 5, x1 - x0, 5); }            // darker front face
-  ctx.fillStyle = '#3b4a33'; ctx.fillRect(x0 + 3, y0 + (n ? 0 : 3), x1 - x0 - 6, (y1 - y0) - (n ? 0 : 3) - (s ? 0 : 6));   // soil
+  const PR = 9, rr = [!n ? PR : 0, !n ? PR : 0, !s ? PR : 0, !s ? PR : 0];                // the planter box is rounded at its two ends too
+  ctx.fillStyle = '#6a6c72'; roundRectPath(x0, y0, x1 - x0, y1 - y0, rr); ctx.fill();    // box body
+  if (!n) { ctx.save(); roundRectPath(x0, y0, x1 - x0, y1 - y0, rr); ctx.clip(); ctx.fillStyle = '#868890'; ctx.fillRect(x0, y0, x1 - x0, 2); ctx.restore(); }   // lit rim
+  if (!s) { ctx.save(); roundRectPath(x0, y0, x1 - x0, y1 - y0, rr); ctx.clip(); ctx.fillStyle = '#4d4f55'; ctx.fillRect(x0, y1 - 5, x1 - x0, 5); ctx.restore(); }   // darker front face
+  const sr = Math.max(0, PR - 3), sx0 = x0 + 3, sx1 = x1 - 3, sy0 = y0 + (n ? 0 : 3), sy1 = y1 - (s ? 0 : 6);
+  ctx.fillStyle = '#3b4a33'; roundRectPath(sx0, sy0, sx1 - sx0, sy1 - sy0, [!n ? sr : 0, !n ? sr : 0, !s ? sr : 0, !s ? sr : 0]); ctx.fill();   // soil
 }
 
 // ---- railings (R): wide grey steel slats (4px slat, 4px gap) between a thin top bar and bottom bar, standing on a
@@ -1201,7 +1229,9 @@ function drawPlayer(player) {
   }
   const lean = skyline.bodyShift();                  // leaning out: the sprite shifts a few px toward the rail
   ctx.translate(lean.x, lean.y + (intro.active ? 0 : player.stairBob));   // on the stairs: the body lifts a little with every step
-  if (!drawCharacter(ctx, player)) {                 // sprite not loaded yet -> blue box fallback
+  const wet = swimDepth(player);                     // in the pool (or on the ladder): waist-deep in the water
+  if (wet > 0) drawSwimmer(ctx, player, wet, performance.now() / 1000);
+  else if (!drawCharacter(ctx, player)) {            // sprite not loaded yet -> blue box fallback
     const sx = player.cx - 16, sy = player.cy - 22;
     ctx.fillStyle = '#1976d2'; ctx.fillRect(sx + 6, sy + 8, 20, 24);
     ctx.fillStyle = '#ffe0b2'; ctx.fillRect(sx + 10, sy + 10, 12, 10);

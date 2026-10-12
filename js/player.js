@@ -4,6 +4,7 @@ import { input } from './input.js';
 
 const STAIR_SPEED = 0.85;   // walking speed on the stairs (1 = same as flat ground)
 const STAIR_BOB = 2;       // how many px the body lifts on each step
+const SWIM_SPEED = 0.6;    // swimming speed in the pool (1 = same as flat ground)
 const STEP_PX = 16;        // one stair step = 16px (two per tile)
 
 export class Player {
@@ -18,6 +19,7 @@ export class Player {
     this.sitting = false;                    // true while sitting on a bench
     this.sitTime = 0;                        // seconds spent sitting (so a held walk key doesn't stand you up instantly)
     this.preSit = null;                      // where we stood before sitting (we go back there when standing up)
+    this.swimming = false;                   // true while in the pool (see pool.js ladder)
     this.onStairs = false;                   // true while the feet are on a stair flight (slower, and the sprite bobs with each step)
     this.stepDist = 0;                       // pixels walked on stairs (drives the step bob: one bob per 16px = one stair step)
   }
@@ -48,7 +50,7 @@ export class Player {
 
     // Walking on a stair flight is a little slower than on the flat (so the steps are felt, but not a lot)
     this.onStairs = isStairs(Math.floor(this.cx / TILE), Math.floor((this.y + this.h - 2) / TILE));
-    const speed = this.onStairs ? this.speed * STAIR_SPEED : this.speed;
+    const speed = this.swimming ? this.speed * SWIM_SPEED : this.onStairs ? this.speed * STAIR_SPEED : this.speed;
 
     // --- X axis first: move, then undo overlap ---
     this.x += dx * speed * dt;
@@ -68,12 +70,12 @@ export class Player {
 
     // --- head and foot clearance: keep the head and the shoes off the plaster walls above / below (only if the player still fits) ---
     // (each push only happens if the player then still has room on the other side too, so a 1-tile gap never traps or blocks him)
-    const wallBottom = headWallBottom(this.x, this.y, this.w);
+    const wallBottom = this.swimming ? null : headWallBottom(this.x, this.y, this.w);   // (not while swimming: the pool rim must not push you about)
     if (wallBottom !== null && this.y < wallBottom + HEAD) {
       const ny = wallBottom + HEAD, ft = footWallTop(this.x, ny, this.w, this.h);
       if (!boxHitsSolid(this.x, ny, this.w, this.h) && (ft === null || ny + this.h <= ft - FOOT)) this.y = ny;
     }
-    const wallTop = footWallTop(this.x, this.y, this.w, this.h);
+    const wallTop = this.swimming ? null : footWallTop(this.x, this.y, this.w, this.h);
     if (wallTop !== null && this.y + this.h > wallTop - FOOT) {
       const ny = wallTop - FOOT - this.h, hb = headWallBottom(this.x, ny, this.w);
       if (!boxHitsSolid(this.x, ny, this.w, this.h) && (hb === null || ny >= hb + HEAD)) this.y = ny;
@@ -82,7 +84,7 @@ export class Player {
     // walking animation only plays if we actually moved (not when pushing against a wall)
     const moved = Math.hypot(this.x - ox, this.y - oy);
     this.moving = moved > 0.01;
-    this.animTime = this.moving ? this.animTime + dt * (this.onStairs ? STAIR_SPEED : 1) : 0;   // slower legs on the stairs too
+    this.animTime = this.moving ? this.animTime + dt * (this.swimming ? SWIM_SPEED : this.onStairs ? STAIR_SPEED : 1) : 0;   // slower legs on the stairs too
     this.stepDist = this.onStairs ? this.stepDist + moved : 0;
   }
 

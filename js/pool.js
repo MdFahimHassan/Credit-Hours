@@ -6,8 +6,8 @@
 //   4. the OPERATORS  - two lab members standing beside the pool, each holding a remote control
 // Where the sign and the operators stand is set in map.js (POOL_PROPS) because they also block the player.
 // All the numbers worth tweaking are in the TWEAK block just below.
-import { TILE, cols, rows, getTile, zoneId, POOL_PROPS } from './map.js';
-import { drawStudent, drawStudentPose, prepareVariants } from './sprites.js';
+import { TILE, cols, rows, getTile, zoneId, POOL_PROPS, swim } from './map.js';
+import { drawStudent, drawStudentPose, prepareVariants, drawCharacter } from './sprites.js';
 
 // ---------------------------------------------------------------- TWEAK ----
 const WATER = {
@@ -288,10 +288,20 @@ function initRobots(R) {
 
 function steerAway(rb, ang) { rb.target = ang + rand(-0.4, 0.4); rb.wander = rand(3, 6); rb.hover = 0; rb.speed *= 0.4; }
 
-export function updatePool(dt) {
+let swimRingT = 0;
+export function updatePool(dt, swimmer = null) {
   if (zoneId !== 'zone2') return;
   const R = poolRect(); if (!R) return;
   if (!robots.length) initRobots(R);
+  if (swimmer?.swimming && !ladder.active) {                // the player in the water: ripples round him, and the robots keep out of his way
+    swimRingT -= dt;
+    if (swimRingT <= 0) { swimRingT = swimmer.moving ? 0.45 : 1.7; addRing(swimmer.cx, swimmer.y + swimmer.h - 4, swimmer.moving ? 26 : 16, swimmer.moving ? 0.38 : 0.2, 1.9); }
+    for (const rb of robots) {
+      rb.avoidCd = Math.max(0, (rb.avoidCd || 0) - dt);
+      const d = Math.hypot(rb.x - swimmer.cx, rb.y - swimmer.cy);
+      if (d < 50 && rb.avoidCd <= 0) { steerAway(rb, Math.atan2(rb.y - swimmer.cy, rb.x - swimmer.cx)); rb.avoidCd = 1.3; }
+    }
+  }
   for (const r of rings) r.age += dt;
   for (let i = rings.length - 1; i >= 0; i--) if (rings[i].age >= rings[i].life) rings.splice(i, 1);
   for (const b of bubbles) { b.age += dt; b.x += b.vx * dt; b.y += b.vy * dt; }
@@ -598,3 +608,74 @@ export function drawSignCard(ctx, VW, VH) {
   ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
 }
 export const SIGN_AFTER = ["So it isn't a swimming pool at all. It's a test tank for the Robotics Lab's underwater robots.", "Better keep out of the water, and leave the robots to their work."];
+
+// ================================================================ the steel ladder: the ONLY way in (and out) ==========
+// Stand on the deck at the north-east corner of the pool, by the ladder, and press E to climb down; swim about (the water tiles are walkable
+// while player.swimming, see map.js `swim`); press E near the ladder again to climb out. Nothing else lets you in: the rim stays solid.
+// STORY SWITCH: set poolAccess.allowed = false (e.g. until a quest step) and E at the ladder shows deniedLines instead of climbing down.
+export const poolAccess = {
+  allowed: true,
+  deniedLines: ["This ladder leads down into the Robotics Lab's test tank.", "Better not go in right now."],
+};
+// 'in' = on the deck beside the ladder (can climb down) | 'out' = in the water near the ladder (can climb out) | null
+export function nearLadder(p) {
+  if (zoneId !== 'zone2') return null;
+  const R = poolRect(); if (!R) return null;
+  if (Math.abs(p.cx - ladderX(R)) > 26) return null;
+  if (p.swimming) return p.cy < R.y + 48 ? 'out' : null;
+  return p.cy > R.y - 70 && p.cy < R.y - 12 ? 'in' : null;
+}
+const ease = (k) => k * k * (3 - 2 * k);
+const placeCentre = (p, cx, cy) => { p.x = cx - p.w / 2; p.y = cy - p.h / 2; };
+export const ladder = {
+  active: false, dir: 'in', t: 0, pts: [], durs: [], splashed: false,
+  start(dir, p) {
+    const R = poolRect(), lx = ladderX(R);
+    const top = { x: lx, y: R.y - 42 }, bottom = { x: lx, y: R.y + 26 }, from = { x: p.cx, y: p.cy };
+    this.active = true; this.dir = dir; this.t = 0; this.splashed = false;
+    if (dir === 'in') { this.pts = [from, top, bottom, bottom]; this.durs = [0.4, 1.15, 0.3]; }                         // walk to the top rung, climb down backwards, settle
+    else { this.pts = [from, bottom, top, { x: lx, y: R.y - 58 }]; this.durs = [0.35, 1.15, 0.35]; swim.on = true; }    // swim to the foot, climb up, step onto the deck
+    p.moving = false; p.animTime = 0;
+  },
+  update(dt, p) {
+    const R = poolRect(); this.t += dt;
+    let t = this.t, seg = 0;
+    while (seg < this.durs.length - 1 && t >= this.durs[seg]) { t -= this.durs[seg]; seg++; }
+    const k = Math.min(1, t / this.durs[seg]), A = this.pts[seg], B = this.pts[seg + 1], e = ease(k);
+    const cx = A.x + (B.x - A.x) * e, cy = A.y + (B.y - A.y) * e;
+    placeCentre(p, cx, cy);
+    const climbing = seg === 1, walking = this.dir === 'in' ? seg < 2 : true;
+    p.facing = climbing || (this.dir === 'out' && seg === 2) ? 'up' : (Math.abs(B.x - A.x) > Math.abs(B.y - A.y) ? (B.x < A.x ? 'left' : 'right') : (B.y < A.y ? 'up' : 'down'));
+    p.moving = walking && k < 1 && (B.x !== A.x || B.y !== A.y); p.animTime = p.moving ? p.animTime + dt * (climbing ? 0.5 : 1) : 0;
+    if (!this.splashed && climbing && (this.dir === 'in' ? cy + 10 > R.y : cy + 10 < R.y + 6)) {   // the feet cross the waterline
+      this.splashed = true; addRing(cx, R.y + 8, 26, 0.6, 2.2); addRing(cx, R.y + 8, 14, 0.5, 1.5);
+    }
+    if (this.t >= this.durs.reduce((a, b) => a + b, 0)) {                                         // done
+      this.active = false; p.moving = false; p.animTime = 0;
+      if (this.dir === 'in') { p.swimming = true; swim.on = true; p.facing = 'down'; placeCentre(p, B.x, B.y); addRing(B.x, R.y + 26, 28, 0.45, 2.4); }
+      else { p.swimming = false; swim.on = false; p.facing = 'up'; placeCentre(p, B.x, B.y); }
+    }
+  },
+};
+
+// How deep the player is in the water right now, in px of his body (0 = dry). Fixed to the pool edge while he climbs in or out.
+export function swimDepth(p) {
+  if (zoneId !== 'zone2' || !(p.swimming || ladder.active)) return 0;
+  const R = poolRect(); if (!R) return 0;
+  return clamp(p.y + p.h - R.y, 0, 17);
+}
+// Draws the player standing in the water: the body above the waterline as usual, the legs below it faint and bluish, rings round the waist.
+export function drawSwimmer(ctx, p, wet, time) {
+  const footY = p.y + p.h, wl = footY - wet, bob = ladder.active ? 0 : Math.round(Math.sin(time * 2.4) * 1);
+  ctx.save(); ctx.beginPath(); ctx.rect(p.cx - 40, footY - 90, 80, wl - (footY - 90)); ctx.clip();
+  ctx.translate(0, bob); drawCharacter(ctx, p); ctx.restore();                              // above the water
+  ctx.save(); ctx.beginPath(); ctx.rect(p.cx - 40, wl, 80, 70); ctx.clip();
+  ctx.globalAlpha = 0.30; ctx.translate(0, bob); drawCharacter(ctx, p); ctx.restore();       // below the water, seen through it
+  ctx.save();
+  ctx.fillStyle = 'rgba(70,160,225,0.55)'; ctx.beginPath(); ctx.ellipse(p.cx, wl + 1, 11, 3.6, 0, 0, TAU); ctx.fill();   // water closing round the waist (hides the cut)
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(235,255,248,0.65)'; ctx.beginPath(); ctx.ellipse(p.cx, wl + 1, 11, 3.6, 0, 0, TAU); ctx.stroke();
+  const k = (time * 1.4) % 1;
+  ctx.strokeStyle = `rgba(235,255,248,${0.45 * (1 - k)})`; ctx.beginPath(); ctx.ellipse(p.cx, wl + 1, 11 + k * 9, 3.6 + k * 3.2, 0, 0, TAU); ctx.stroke();   // a ring that keeps spreading out
+  ctx.restore();
+}
