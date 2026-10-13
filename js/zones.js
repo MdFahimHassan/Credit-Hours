@@ -69,7 +69,7 @@ export const ZONES = {
   zone1: {
     name: 'Rooftop Entry',
     rows: [
-    "#UqHYH876SS66SS678YHYqkkkZHUUHHRRRRRRR",
+    "eUqHYH876SS66SS678YHYqkkkZHUUHHRRRRRRR",
     "#.qYHH765SS55SS567HZHqkkkYH..HH......R",
     "j.qHHY654SS44SS456HYZqkkkHZ..HH..CCC.R",
     "j.qZHH543SS33SS345ZHHq...HY..HH..CTC.R",
@@ -105,7 +105,7 @@ export const ZONES = {
       '0,10': { to: 'zone2', spawn: { x: 29, y: 9 },  facing: 'left', label: 'Right path' },
       '0,19': { to: 'zone2', spawn: { x: 29, y: 19 }, facing: 'left', label: 'Left path' },
       '0,20': { to: 'zone2', spawn: { x: 29, y: 20 }, facing: 'left', label: 'Left path' },
-      '1,0':  { to: 'zone3', spawn: { x: 1, y: 28 },  facing: 'up', label: 'Up path (left)' },
+      '1,0':  { to: 'zone3', spawn: { x: 10, y: 28 }, facing: 'up', label: 'Up path (left)' },
       // 2-wide path at the top right: will lead to the upper zone (no 'to' yet = just shows a hint)
       '27,0': { label: 'Upper zone path' },
       '28,0': { label: 'Upper zone path' },
@@ -169,7 +169,7 @@ export const ZONES = {
       '30,19': { to: 'zone1', spawn: { x: 1, y: 19 }, facing: 'right', label: 'Left path' },
       // the north corridor (rows 1-2) runs east along the top of the hedge and leaves the zone at x 30 -> Lawn Zone (west path, lower)
       '30,1':  { to: 'zone3', spawn: { x: 1, y: 14 }, facing: 'right', label: 'Lawn zone path' },
-      '30,2':  { to: 'zone3', spawn: { x: 1, y: 14 }, facing: 'right', label: 'Lawn zone path' },
+      '30,2':  { to: 'zone3', spawn: { x: 1, y: 15 }, facing: 'right', label: 'Lawn zone path' },
       '30,28': { to: 'zone1', spawn: { x: 1, y: 28 }, facing: 'right', label: 'Pool zone path' },   // the 1-tile path along row 28 meets zone 1's bottom-left opening
     },
   },
@@ -181,7 +181,7 @@ export const ZONES = {
   //   STAIRS: two small railed flights (2 lanes + a white handrail, rows 26-29) copied from zone 1's: x29-30 and x33-34, with a 2-tile block (x31-32) between them.
   zone3: {
     name: 'Lawn Zone',
-    spawn: { x: 1, y: 28 },
+    spawn: { x: 10, y: 28 },
     rows: [
       "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
       "R..............................................................R",
@@ -196,10 +196,10 @@ export const ZONES = {
       "R..............................................................R",
       "R..........qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq..........R",
       "R..........qHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHq..........R",
-      "R..........qHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHq..........R",
+      "#..........qHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHq..........R",
       "X..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
-      "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
-      "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
+      "X..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
+      "#..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
       "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
       "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
       "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
@@ -211,15 +211,17 @@ export const ZONES = {
       "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
       "R..........qHHHHHHHHHHHHHHHHqSSqqSSqHHHHHHHHHHHHHHHHq..........R",
       "R..........qHHHHHHHHHHHHHHHHqSSqqSSqHHHHHHHHHHHHHHHHq..........R",
-      "#.#########qqqqqqqqqqqqqqqqqqSSqqSSqqqqqqqqqqqqqqqqqq###########",
-      "#X##########################qSSqqSSq############################",
+      "##########.qqqqqqqqqqqqqqqqqqSSqqSSqqqqqqqqqqqqqqqqqq###########",
+      "##########X#################qSSqqSSq############################",
     ],
     exits: {
-      // the 1-tile entry path from zone 1 (zone 1's up-path at x 1)
-      '1,29': { to: 'zone1', spawn: { x: 1, y: 1 }, facing: 'down', label: 'Entry path' },
+      // the 1-tile entry path from zone 1 (zone 1's up-path at x 1) - it now runs at x 10, right beside the lawn's west border (x 11)
+      '10,29': { to: 'zone1', spawn: { x: 1, y: 1 }, facing: 'down', label: 'Entry path' },
       // west paths (zone 4 was removed - the rooftop is L-shaped). The lower one leads to zone 2's north corridor; the upper one is still to be connected
       '0,5':  { label: 'West path (upper)' },
-      '0,14': { to: 'zone2', spawn: { x: 29, y: 2 }, facing: 'left', label: 'West path (lower)' },
+      // the 2-wide railed path from zone 2's north corridor (zone 2 rows 1-2 <-> rows 14-15 here)
+      '0,14': { to: 'zone2', spawn: { x: 29, y: 1 }, facing: 'left', label: 'West path (lower)' },
+      '0,15': { to: 'zone2', spawn: { x: 29, y: 2 }, facing: 'left', label: 'West path (lower)' },
     },
   },
 };

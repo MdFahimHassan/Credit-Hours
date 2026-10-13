@@ -67,7 +67,7 @@ const EXT = 480;                // how far (px) the skyline carries on past the 
 // STAIRS_DARK: flights of stairs on these zones do NOT show steps / rails / extra view beyond the edge: the stairs lead straight
 // up to the next level (zone 1: the lawn, painted by renderer.js). The camera does not slide out for them either.
 const STAIRS_DARK = ['zone1'];
-const NO_PATH_RAILS = ['zone3'];   // zone 3: flat exit paths are just a path between two plain walls (no rails)
+const NO_PATH_RAILS = { zone3: ['s'] };   // zone 3: the 1-tile entry path from zone 1 (south edge) is just a path between two plain walls; the 2-wide west path from zone 2 has its rails
 // SHARE: this side's skyline window does not paint its own picture, it shows the picture of another side (in THAT side's direction, so
 //   nothing turns). zone 1: the north window (x 31-37, top right) shows the east skyline, which simply carries on to the left.
 //   The source side gets DNEG extra px of near ground on the "wrong" side of its edge for that (see paintPano, dneg).
@@ -310,11 +310,11 @@ function railRun(g, m, L) {
 // THE OPEN PATHS (exits). In the local frame: u along the edge, d away from it (d = 0 is the edge of the map).
 // floor (slabs or stairs) + a railing on each side + dark space behind the rails, all fading to black with distance.
 // ---------------------------------------------------------------------------------------------
-function paintExit(g, grp) {
+function paintExit(g, grp, side) {
   if (STAIRS_DARK.includes(zoneId) && grp.segs.every((s) => s.stairs)) return;   // nothing beyond the top of a dark flight (zone 1: renderer.js paints the lawn there)
   const u0 = grp.a * TILE, u1 = (grp.b + 1) * TILE, w = u1 - u0;
   const stairsAny = grp.segs.some((s) => s.stairs), L = stairsAny ? STAIR_LEN : PATH_LEN;
-  const RW = NO_PATH_RAILS.includes(zoneId) && !stairsAny ? 0 : 24;   // (zone 3: a flat path has plain walls beside it, no rails)
+  const RW = NO_PATH_RAILS[zoneId]?.includes(side) && !stairsAny ? 0 : 24;   // (zone 3, south edge: a flat path has plain walls beside it, no rails)
   const x0 = u0 - RW, tw = w + 2 * RW;
   const t = mkCanvas(tw, PH), h = t.getContext('2d');
   h.translate(-x0, 0);                                             // from here on x = u (same numbers as the side's own frame)
@@ -399,7 +399,7 @@ function buildDeco(side, zid) {
   sh.addColorStop(0, 'rgba(24,20,14,0.40)'); sh.addColorStop(1, 'rgba(24,20,14,0)');
   g.fillStyle = sh; g.fillRect(0, 0, len, 30);
   g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, 0, len, 2);
-  for (const grp of F.groups) paintExit(g, grp);
+  for (const grp of F.groups) paintExit(g, grp, side);
   g.fillStyle = rgba('#ffb86e', cfg.warm * 0.5); g.fillRect(0, 0, len, PH);       // the same warm light as the skyline
   return c;
 }
