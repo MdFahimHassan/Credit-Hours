@@ -14,7 +14,7 @@
 //   q      semi-wall (solid): low board-formed concrete planter wall around the zone 1 hedge beds
 //   m      flat base slab (solid): the one straight tile at the foot of each outer tier block (zone 1) - same look as the semi-wall; the stepped layers start on the row above it
 //   7, 8   extra-high tiers (same as 1-6, just higher): they let every column of an outer tier block step down on the SAME rows
-// New in zone 4:
+// Tiles that only the (removed) zone 4 used - kept in case they come back:
 //   C  concrete bench (solid)   T  tree in a grey planter box (solid)   b  bush (WALKABLE - you can walk into it)
 // Basement stairwell block (zone 1, x 21-23, rows 0-2, copied from the real storage room: a concrete wedge, tall at the front):
 //   k  block (solid): x21 and x23 are full wall tiles, x22 rows 0-2 is the roof + the solid portal. Drawn as ONE piece by drawBasementBlock() in renderer.js
@@ -105,7 +105,7 @@ export const ZONES = {
       '0,10': { to: 'zone2', spawn: { x: 29, y: 9 },  facing: 'left', label: 'Right path' },
       '0,19': { to: 'zone2', spawn: { x: 29, y: 19 }, facing: 'left', label: 'Left path' },
       '0,20': { to: 'zone2', spawn: { x: 29, y: 20 }, facing: 'left', label: 'Left path' },
-      '1,0':  { to: 'zone3', spawn: { x: 2, y: 16 },  facing: 'up', label: 'Up path (left)' },
+      '1,0':  { to: 'zone3', spawn: { x: 1, y: 28 },  facing: 'up', label: 'Up path (left)' },
       // 2-wide path at the top right: will lead to the upper zone (no 'to' yet = just shows a hint)
       '27,0': { label: 'Upper zone path' },
       '28,0': { label: 'Upper zone path' },
@@ -125,17 +125,18 @@ export const ZONES = {
   // SOUTH SIDE: a 1-tile path runs along row 28 from the west rail to the east exit (30,28), which meets zone 1's bottom-left opening.
   //   The bottom hedge lane ends on row 27; a 12x4 hedge (x10-21, rows 24-27) sits on the path's north side, then a plaster block (x22-29, rows 24-27)
   //   carries the women's restroom doors (G G at x23-24, row 24, on the pool-facing north side). The whole south wall (row 29) is a rail with the city skyline beyond.
-  // NORTH SIDE mirrors the south: a 12x5 hedge (x11-22, rows 1-5) flush against the north wall (shifted 1 tile so the up-path at x9-10 stays open) and a
-  //   plaster block (x23-29, rows 1-5) with the men's restroom doors (M M at x24-25, row 5, on the pool-facing south side).
-  // The path to zone 4 is the 2-wide 'U' in the north wall at x 9-10, right beside the sitting area (like zone 1's upper-zone path).
+  // NORTH SIDE: a 12x3 hedge (x11-22, rows 3-5) and a plaster block (x23-30, rows 3-5) with the men's restroom doors (M M at x24-25, row 5, on the pool-facing south side).
+  // NORTH CORRIDOR: the 2-wide path at x 9-10 no longer fades to black at the top. It turns right (east) and runs along the top of the hedge and the block
+  //   (rows 1-2, x 9-30), with a rail along its outer (north) side (row 0, x 9-29) and the city skyline beyond (the old wall is gone), and leaves the zone at
+  //   x 30 (X, rows 1-2) with the normal black fade -> zone 3 (Lawn Zone). Zone 4 (the top-left zone) was removed: the real rooftop is L-shaped.
   zone2: {
     name: 'Pool Zone',
     spawn: { x: 29, y: 10 },
     rows: [
-    "R########UU####################",
-    "R......HH..YYHHYYZYHHYH########",
-    "R.CCC..HH..HZHHHHHHHZHY########",
-    "R.CTC..HH..HHHHHHHZHHYY########",
+    "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
+    "R......HH.....................X",
+    "R.CCC..HH.....................X",
+    "R.CTC..HH..YYHHYYZYHHYH########",
     "R.CTC..HH..HHYYHHYHYHZY########",
     "R.CCC..HH..HYHHZHHYHHYH#MM#####",
     "R.............................#",
@@ -166,90 +167,68 @@ export const ZONES = {
     exits: {
       '30,10': { to: 'zone1', spawn: { x: 1, y: 11 }, facing: 'right', label: 'Right path' },
       '30,19': { to: 'zone1', spawn: { x: 1, y: 19 }, facing: 'right', label: 'Left path' },
-      '9,0':   { to: 'zone4', spawn: { x: 2, y: 16 }, facing: 'up', label: 'Upper zone' },
-      '10,0':  { to: 'zone4', spawn: { x: 3, y: 16 }, facing: 'up', label: 'Upper zone' },
+      // the north corridor (rows 1-2) runs east along the top of the hedge and leaves the zone at x 30 -> Lawn Zone (west path, lower)
+      '30,1':  { to: 'zone3', spawn: { x: 1, y: 14 }, facing: 'right', label: 'Lawn zone path' },
+      '30,2':  { to: 'zone3', spawn: { x: 1, y: 14 }, facing: 'right', label: 'Lawn zone path' },
       '30,28': { to: 'zone1', spawn: { x: 1, y: 28 }, facing: 'right', label: 'Pool zone path' },   // the 1-tile path along row 28 meets zone 1's bottom-left opening
     },
   },
 
+  // Zone 3 (Lawn Zone) is 64 tiles wide and 30 tall: a big lawn (x14-49, rows 14-25) ringed by a hedge border (the same one as zone 1's hedge beds: semi-wall q + 2 hedge tiles)
+  //   and, on the west, north and east, an EMPTY 10-tile-wide path all round it (x1-10, rows 1-10, x53-62) - stuff is added / the paths are narrowed later.
+  //   The outer edge is a rail (R) with the city skyline beyond (west / north / east), the south side is the wall above zone 1 (plain wall, no skyline).
+  //   ENTRY from zone 1: a 1-tile path at x1 (rows 28-29, exit at (1,29)) with a wall on each side, opening into the west path above.
+  //   STAIRS: two small railed flights (2 lanes + a white handrail, rows 26-29) copied from zone 1's: x29-30 and x33-34, with a 2-tile block (x31-32) between them.
   zone3: {
     name: 'Lawn Zone',
-    spawn: { x: 14, y: 16 },
+    spawn: { x: 1, y: 28 },
     rows: [
-      "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
-      "RppppppppppppppppppppppppppppR",
-      "RDpBBBBBBBBBBBBBBBBBBBBBBBBppR",
-      "RKpBggggggggggggggggggggggBpDR",
-      "RKpBggggggggggggggggggggggBpKR",
-      "XppBggggggggggggggggggggggBpKR",
-      "R.pBggggggggggggggggggggggBpKR",
-      "R.pBggggggggggggggggggggggBpKR",
-      "R.pBggggggggggggggggggggggBp.R",
-      "R.pBggggggggggggggggggggggBp.R",
-      "RKpBggggggggggggggggggggggBp.R",
-      "RKpBggggggggggggggggggggggBp.R",
-      "RKpBggggggggggggggggggggggBp.R",
-      "RDpBggggggggggggggggggggggBp.R",
-      "XppBggggggggggggggggggggggBp.R",
-      "R.pBggggggggggggggggggggggBp.R",
-      "R.pBBggggggggggggggggggggBBp.R",
-      "R.XXXSSSSSSSSSSSSSSSSSSSSXXX.R",
+      "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
+      "R..............................................................R",
+      "R..............................................................R",
+      "R..............................................................R",
+      "R..............................................................R",
+      "X..............................................................R",
+      "R..............................................................R",
+      "R..............................................................R",
+      "R..............................................................R",
+      "R..............................................................R",
+      "R..............................................................R",
+      "R..........qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq..........R",
+      "R..........qHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHq..........R",
+      "R..........qHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHq..........R",
+      "X..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
+      "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
+      "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
+      "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
+      "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
+      "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
+      "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
+      "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
+      "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
+      "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
+      "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
+      "R..........qHHggggggggggggggggggggggggggggggggggggHHq..........R",
+      "R..........qHHHHHHHHHHHHHHHHqSSqqSSqHHHHHHHHHHHHHHHHq..........R",
+      "R..........qHHHHHHHHHHHHHHHHqSSqqSSqHHHHHHHHHHHHHHHHq..........R",
+      "#.#########qqqqqqqqqqqqqqqqqqSSqqSSqqqqqqqqqqqqqqqqqq###########",
+      "#X##########################qSSqqSSq############################",
     ],
     exits: {
-      // west paths lead to zone 4
-      '0,5':  { to: 'zone4', spawn: { x: 28, y: 2 },  facing: 'left', label: 'West path (upper)' },
-      '0,14': { to: 'zone4', spawn: { x: 28, y: 14 }, facing: 'left', label: 'West path (lower)' },
-      // bottom row: left path (x 2-4), stairs (x 5-24) and right path (x 25-27) lead down to zone 1.
-      // The stairs and the stairs exits in zone 1 are generated below.
+      // the 1-tile entry path from zone 1 (zone 1's up-path at x 1)
+      '1,29': { to: 'zone1', spawn: { x: 1, y: 1 }, facing: 'down', label: 'Entry path' },
+      // west paths (zone 4 was removed - the rooftop is L-shaped). The lower one leads to zone 2's north corridor; the upper one is still to be connected
+      '0,5':  { label: 'West path (upper)' },
+      '0,14': { to: 'zone2', spawn: { x: 29, y: 2 }, facing: 'left', label: 'West path (lower)' },
     },
   },
 };
 
-// Zone 4 sits to the upper left. r = row 2 exit, L = row 14 exit (they match zone 3's west exits).
-ZONES.zone4 = {
-  name: 'Garden Zone',
-  spawn: { x: 2, y: 16 },
-  rows: [
-    "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
-    "RppppppppppppppppppppppppppppR",
-    "RppppppppppppppppppppppppppppX",
-    "RppCCCCCCpbbbbbbbbbbbbbbbbbbbR",
-    "RppCTTTTCpbbbbbbbbbbbbbbbbbbbR",
-    "RppCCCCCCpbbbbbbbbbbbbbbbbbbbR",
-    "RppppppppppppppppppppppppppppR",
-    "RpbbbbbbbbbbbbbbbbbbbbbbbbbbpR",
-    "RpbbbbbbbbbbbbbbbbbbbbbbbbbbpR",
-    "RpppppppppppppppppppppppppbbpR",
-    "RppCCCCCCpbbbbbbbbbbbbbbbpbbpR",
-    "RppCTTTTCpbbbbbbbbbbbbbbbpbbpR",
-    "RppCCCCCCpbbbbbbbbbbbbbbbpbbpR",
-    "RpppppppppppppppppppppppppbbpR",
-    "RpppbbbbbpbbbbbbbbbbbbbbbbbbpX",
-    "RpppbbbbbpbbbbbbbbbbbbbbbbbbpR",
-    "RpppbbbbbppppppppppppppppppppR",
-    "##XX##########################",
-  ],
-  exits: {
-    '29,2':  { to: 'zone3', spawn: { x: 1, y: 5 },  facing: 'right', label: 'r path' },
-    '29,14': { to: 'zone3', spawn: { x: 1, y: 14 }, facing: 'right', label: 'L path' },
-    '2,17':  { to: 'zone2', spawn: { x: 9, y: 1 },  facing: 'down',  label: 'Down to the pool' },
-    '3,17':  { to: 'zone2', spawn: { x: 10, y: 1 },  facing: 'down',  label: 'Down to the pool' },
-  },
-};
-
 // ---- Zone 3 <-> zone 1 links -------------------------------------------------------------
-// Left path: zone 3 (x 2-4, bottom row) -> zone 1 left up path (3,1). Right path: x 25-27 -> (17,1).
-for (const x of [2, 3, 4])    ZONES.zone3.exits[x + ',17'] = { to: 'zone1', spawn: { x: 1,  y: 1 }, facing: 'down', label: 'Left path' };
-// The right up-path in zone 1 was removed, so zone 3's right path now also arrives at the (only) left up-path
-for (const x of [25, 26, 27]) ZONES.zone3.exits[x + ',17'] = { to: 'zone1', spawn: { x: 1, y: 1 }, facing: 'down', label: 'Right path' };
-
-// Stairs: zone 3 has 20 stair tiles (x 5-24). Zone 1 has TWO railed flights (x 9-10 and x 13-14, rows 0-4).
-// The left half of zone 3's stairs (x 5-14) leads down the left flight, the right half (x 15-24) down the right flight.
-for (let x = 5; x <= 24; x++) {
-  const left = x <= 14, k = left ? x - 5 : x - 15;              // k = 0..9 across that half
-  ZONES.zone3.exits[x + ',17'] = { to: 'zone1', spawn: { x: (left ? 9 : 13) + (k >= 5 ? 1 : 0), y: 1 }, facing: 'down', label: 'Stairs' };
-}
-for (const fx of [9, 10, 13, 14]) {                             // top row of each flight in zone 1 -> back up to the lawn
-  const left = fx < 12, sx = (left ? 5 : 15) + (fx - (left ? 9 : 13)) * 5 + 2;
-  ZONES.zone1.exits[fx + ',0'] = { to: 'zone3', spawn: { x: sx, y: 16 }, facing: 'up', label: 'Stairs' };
+// The 1-tile entry path ((1,29) in zone 3 <-> zone 1's up-path at (1,0)) is listed in the two zone blocks.
+// Stairs: zone 3 has two railed flights (x 29-30 and x 33-34, rows 26-29) that match zone 1's two flights (x 9-10 and x 13-14, rows 0-4), lane for lane.
+const FLIGHTS = [[9, 29], [10, 30], [13, 33], [14, 34]];       // [x in zone 1, x in zone 3]
+for (const [x1, x3] of FLIGHTS) {
+  ZONES.zone3.exits[x3 + ',29'] = { to: 'zone1', spawn: { x: x1, y: 1 }, facing: 'down', label: 'Stairs' };
+  ZONES.zone1.exits[x1 + ',0']  = { to: 'zone3', spawn: { x: x3, y: 25 }, facing: 'up', label: 'Stairs' };
 }

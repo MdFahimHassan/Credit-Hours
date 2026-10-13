@@ -54,18 +54,20 @@ const EO = PH / Z;            // depth of the painting in its own (zoomed) units
 //   WINDOW_FILL tile ranges that show the skyline although they have no rail (zone 1: the wall behind the east hedge bed)
 //   WALL_STYLE  'concrete' (default) or 'terrace' (the wall of the level above, with planters and vines)
 // ---------------------------------------------------------------------------------------------
-const SKIP = { zone1: ['w'], zone2: ['n'] };   // zone 2: the north wall has no skyline (its corner rail tile (0,0) belongs to the west skyline only)
+const SKIP = { zone1: ['w'], zone2: [] };
+const SKIP_TILES = { zone2: { e: [0] } };   // zone 2: the north rails (x 9-29, along the corridor) show the skyline; the corner rail tile (0,0) belongs to the west skyline only
 const WINDOW_FILL = { zone1: { e: [[8, 21]] }, zone2: { w: [[8, 21]] } };   // zone 2: the wall behind the west hedge bed
 const WALL_STYLE = { zone1: { n: 'terrace' } };
 const wallStyle = (zid, side) => WALL_STYLE[zid]?.[side] ?? 'concrete';
 // EXTEND: the skyline of this side carries on past the START of the edge (u < 0) instead of ending in a cream-wall corner.
 //   zone 1: the east skyline runs on up past the top-right corner, the south skyline runs on left past the bottom-left corner.
 //   It also carries on past the END of the edge, so the bottom-right corner (east + south) can turn smoothly (see drawCorner).
-const EXTEND = { zone1: { e: true, s: true }, zone2: { w: true, s: true } };   // zone 2: the west skyline runs the full height and on past the top corner; west + south meet in a turning corner (CORNER)
+const EXTEND = { zone1: { e: true, s: true }, zone2: { n: true, w: true, s: true }, zone3: { n: true, w: true, e: true } };   // zone 2: the west skyline runs the full height and on past the top corner; west + south meet in a turning corner (CORNER)
 const EXT = 480;                // how far (px) the skyline carries on past the corner (the camera can never show more than PH = 320)
 // STAIRS_DARK: flights of stairs on these zones do NOT show steps / rails / extra view beyond the edge: the stairs lead straight
 // up to the next level (zone 1: the lawn, painted by renderer.js). The camera does not slide out for them either.
 const STAIRS_DARK = ['zone1'];
+const NO_PATH_RAILS = ['zone3'];   // zone 3: flat exit paths are just a path between two plain walls (no rails)
 // SHARE: this side's skyline window does not paint its own picture, it shows the picture of another side (in THAT side's direction, so
 //   nothing turns). zone 1: the north window (x 31-37, top right) shows the east skyline, which simply carries on to the left.
 //   The source side gets DNEG extra px of near ground on the "wrong" side of its edge for that (see paintPano, dneg).
@@ -74,9 +76,10 @@ const DNEG = 240;
 // OPEN_END: this side's window has no concrete pier at its far end (its picture goes on round the corner)
 const OPEN_END = { zone1: ['n'] };
 // LINK: sides whose skylines are one picture round a corner: they share the same fog clearness so no seam shows
-const LINK = { zone1: ['n', 'e', 's'], zone2: ['w', 's'] };
+const LINK = { zone1: ['n', 'e', 's'], zone2: ['w', 's'], zone3: ['w', 'n', 'e'] };
 // ROAD_FIX: the street round the corner must have the same distance / width on both sides so the two roads meet in a clean mitre
-const ROAD_FIX = { zone1: { e: { d: 46, h: 12 }, s: { d: 46, h: 12 } }, zone2: { w: { d: 46, h: 12, speed: 18, cars: 1.2 }, s: { d: 46, h: 12 } } };
+const ROAD_FIX = { zone1: { e: { d: 46, h: 12 }, s: { d: 46, h: 12 } }, zone2: { w: { d: 46, h: 12, speed: 18, cars: 1.2 }, s: { d: 46, h: 12 }, n: { d: 46, h: 12, speed: 18, cars: 1.2 } },
+  zone3: { w: { d: 46, h: 12, speed: 18, cars: 1.2 }, n: { d: 46, h: 12, speed: 18, cars: 1.2 }, e: { d: 46, h: 12, speed: 18, cars: 1.2 } } };   // (n: so the west road and the north road meet in a mitre at the north-west corner, see drawCornerNW)
 
 // ---------------------------------------------------------------------------------------------
 // Which parts of the edges are rails (skyline windows) and which are exits (paths / stairs). Cached per zone.
@@ -92,7 +95,7 @@ function features() {
     const rails = [], exits = [], exitsView = [], set = new Set();
     for (let i = 0; i < n; i++) {
       const [x, y] = at(i);
-      if (getTile(x, y) === 'R' && !skip.includes(s)) { rails.push(i); set.add(i); }
+      if (getTile(x, y) === 'R' && !skip.includes(s) && !(SKIP_TILES[zoneId]?.[s] ?? []).includes(i)) { rails.push(i); set.add(i); }
       if (getExit(x, y)) {
         exits.push(i);
         if (!(STAIRS_DARK.includes(zoneId) && getTile(x, y) === 'S')) exitsView.push(i);   // dark stairs never pull the camera out
@@ -311,7 +314,7 @@ function paintExit(g, grp) {
   if (STAIRS_DARK.includes(zoneId) && grp.segs.every((s) => s.stairs)) return;   // nothing beyond the top of a dark flight (zone 1: renderer.js paints the lawn there)
   const u0 = grp.a * TILE, u1 = (grp.b + 1) * TILE, w = u1 - u0;
   const stairsAny = grp.segs.some((s) => s.stairs), L = stairsAny ? STAIR_LEN : PATH_LEN;
-  const RW = 24;                                                   // rail band width. Nothing (no shadow, no fade) is painted outside the rails: the wall beside a path stays plain
+  const RW = NO_PATH_RAILS.includes(zoneId) && !stairsAny ? 0 : 24;   // (zone 3: a flat path has plain walls beside it, no rails)
   const x0 = u0 - RW, tw = w + 2 * RW;
   const t = mkCanvas(tw, PH), h = t.getContext('2d');
   h.translate(-x0, 0);                                             // from here on x = u (same numbers as the side's own frame)
@@ -332,7 +335,7 @@ function paintExit(g, grp) {
         h.fillStyle = 'rgba(255,255,255,0.45)'; h.fillRect(a, d + 15, wd, 1);
       }
       h.fillStyle = 'rgba(0,0,0,0.12)'; h.fillRect(a, 0, 2, L); h.fillRect(a + wd - 2, 0, 2, L);
-      if (zoneId === 'zone1') for (let i = seg.a + 1; i <= seg.b; i++) {   // handrail between the lanes of a flight (as on the map)
+      if (zoneId === 'zone1' || zoneId === 'zone3') for (let i = seg.a + 1; i <= seg.b; i++) {   // handrail between the lanes of a flight (as on the map)
         const x = i * TILE;
         h.fillStyle = 'rgba(0,0,0,0.22)'; h.fillRect(x, 0, 5, L);
         h.fillStyle = '#9aa2a8'; h.fillRect(x - 2, 0, 4, L);
@@ -346,8 +349,7 @@ function paintExit(g, grp) {
     h.fillStyle = '#9aa2a8'; h.fillRect(x - 2, 0, 4, L); h.fillStyle = '#e3e7ea'; h.fillRect(x - 1, 0, 2, L);
   }
   // a railing on each side (parapet next to the path, slats outside)
-  railRun(h, [0, 1, 1, 0, u0 - RW, 0], L);
-  railRun(h, [0, 1, -1, 0, u1 + RW, 0], L);
+  if (RW) { railRun(h, [0, 1, 1, 0, u0 - RW, 0], L); railRun(h, [0, 1, -1, 0, u1 + RW, 0], L); }
   // fade to black with distance, and a soft shadow at the start of the path
   const fg = h.createLinearGradient(0, 0, 0, PH);
   for (let i = 0; i <= 12; i++) {
@@ -727,6 +729,7 @@ export function drawSkyline(ctx, camera, VW, VH, time) {
   ctx.fillRect(camera.x, camera.y, VW, VH);
   for (const s of SIDES) if (skyline.over[s] >= 0.5) drawSide(ctx, s, time);
   drawCorner(ctx, time);
+  drawNorthCorners(ctx, time);
 }
 
 // local frame of a side -> world: x = along the edge, y = away from it (1:1, a flip / quarter turn, NO scaling)
@@ -741,7 +744,7 @@ function drawSide(g, side, time) {
   const sw = CORNER[zoneId]?.corner === 'sw';                   // zone 2: the south-west corner square is drawn by drawCorner
   if (side === 'e') g.rect(W, -ext, over, H + ext);            // (the corner at the END of e / s is drawn by drawCorner, as one turning picture)
   else if (side === 'w') g.rect(-over, -ext, over, H + (sw ? ext : 2 * ext));   // (ext = 0 where the west side has no extension: zone 1)
-  else if (side === 'n') g.rect(0, -over, W, over);
+  else if (side === 'n') g.rect(0, -over, W + (NORTH_CORNERS[zoneId]?.includes('ne') ? 0 : ext), over);   // (ext: the north skyline also carries on past the north-east corner, above the exit path)
   else g.rect(sw ? 0 : -ext, H, W + (sw ? 0 : ext), over);
   g.clip();
   g.transform(...sideMatrix(side));
@@ -878,5 +881,46 @@ function drawCorner(g, time) {
   g.imageSmoothingEnabled = false;
   g.drawImage(cornerA, west ? -PH : W, H);
   g.drawImage(cornerB, west ? -PH : W, H);
+  g.restore();
+}
+// ---------------------------------------------------------------------------------------------
+// NORTH CORNERS (zones 2 and 3): the north skyline carried on sideways and the west / east skyline carried on upwards meet in a soft diagonal,
+// exactly like the south-west corner (drawCorner), just mirrored. Without it there would be a hard seam above the west / east rail.
+//   NORTH_CORNERS: which corners get one ('nw' = north-west, 'ne' = north-east). Needs EXTEND for the sides involved.
+// ---------------------------------------------------------------------------------------------
+const NORTH_CORNERS = { zone2: ['nw'], zone3: ['nw', 'ne'] };
+const nCorner = { nw: [null, null], ne: [null, null] };
+function drawNorthCorners(g, time) {
+  for (const c of NORTH_CORNERS[zoneId] ?? []) drawNorthCorner(g, time, c === 'ne');
+}
+function drawNorthCorner(g, time, east) {
+  const vs = east ? 'e' : 'w', key = east ? 'ne' : 'nw';
+  const cw = Math.min(PH, Math.ceil(skyline.over[vs])), ch = Math.min(PH, Math.ceil(skyline.over.n));
+  if (skyline.over[vs] < 0.5 || skyline.over.n < 0.5) return;
+  const Ln = layers('n'), Lv = layers(vs);
+  if (!Ln.pano || !Lv.pano) return;
+  const cv = nCorner[key];
+  if (!cv[0]) { cv[0] = mkCanvas(PH, PH); cv[1] = mkCanvas(PH, PH); }
+  const W = widthPx;
+  const paint = (canvas, side, P) => {
+    const c = canvas.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0); c.globalCompositeOperation = 'source-over'; c.clearRect(0, 0, PH, PH);
+    c.translate(east ? -W : PH, PH); c.transform(...sideMatrix(side)); c.imageSmoothingEnabled = false;   // corner-local: x = x + PH (nw) / x - W (ne), y = y + PH
+    drawPicture(c, side, P, time);
+    return c;
+  };
+  paint(cv[0], 'n', Ln.pano);                                   // north picture, carried on sideways
+  const cb = paint(cv[1], vs, Lv.pano);                         // west / east picture, carried on upwards, then masked by the diagonal
+  cb.setTransform(1, 0, 0, 1, 0, 0); cb.globalCompositeOperation = 'destination-in';
+  const mk = east ? cb.createLinearGradient((PH - BLEND) / 2, (PH - BLEND) / 2, (PH + BLEND) / 2, (PH + BLEND) / 2)   // east picture: weight 1 on the east side of the diagonal
+                  : cb.createLinearGradient(BLEND / 2, -BLEND / 2, -BLEND / 2, BLEND / 2);                          // west picture: weight 1 on the west side
+  mk.addColorStop(0, 'rgba(0,0,0,0)'); mk.addColorStop(1, 'rgba(0,0,0,1)');
+  cb.fillStyle = mk; cb.fillRect(0, 0, PH, PH);
+  cb.globalCompositeOperation = 'source-over';
+  g.save();
+  g.beginPath(); g.rect(east ? W : -cw, -ch, cw, ch); g.clip();
+  g.imageSmoothingEnabled = false;
+  g.drawImage(cv[0], east ? W : -PH, -PH);
+  g.drawImage(cv[1], east ? W : -PH, -PH);
   g.restore();
 }

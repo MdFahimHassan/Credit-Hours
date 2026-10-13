@@ -122,7 +122,7 @@ function railV(x, y, east, g = ctx, sh = true) {          // vertical rail segme
 // The two hedge beds beside the stairs (zone 1, rows 0-5: x3-5 and x18-20) sit against the semi-wall and the steps, which are solid, so they
 // used to get no guard rail. A rail is now drawn on those faces too (same rail as every other hedge). The top edge (map edge) stays open.
 const isStairBed = (x, y) => zoneId === 'zone1' && y >= 0 && y <= 5 && ((x >= 3 && x <= 5) || (x >= 18 && x <= 20));
-const isRailable = (x, y, fx, fy) => !isPlanted(x, y) && (!isSolid(x, y) || (isStairBed(fx, fy) && (getTile(x, y) === 'q' || getTile(x, y) === 'm' || isTierCh(getTile(x, y)))));   // (fx, fy) = the hedge tile asking
+const isRailable = (x, y, fx, fy) => !isPlanted(x, y) && getTile(x, y) !== 'g' && (!isSolid(x, y) || (isStairBed(fx, fy) && (getTile(x, y) === 'q' || getTile(x, y) === 'm' || isTierCh(getTile(x, y)))));   // (fx, fy) = the hedge tile asking
 function drawGuardRail(px, py, tx, ty) {
   const open = (x, y) => isRailable(x, y, tx, ty);   // floor / path next to the planted area (or the wall / steps beside a stair-side bed)
   if (open(tx, ty - 1)) railH(px, py);
@@ -248,7 +248,7 @@ function drawRail(px, py, tx, ty) {
   if (ty === 0) edges.push('n');
   if (ty === rows - 1) edges.push('s');
   if (tx === 0) edges.push('w');
-  if (tx === cols - 1) edges.push('e');
+  if (tx === cols - 1 && !(zoneId === 'zone2' && ty === 0)) edges.push('e');   // (zone 2: the north-east corner tile is part of the north rail only)
   if (edges.length) {                                                  // on the edge of the zone: parapet + slats, outer side
     for (const s of edges) {
       const m = { e: [0, 1, -1, 0, px + TILE, py], w: [0, 1, 1, 0, px, py], n: [1, 0, 0, 1, px, py], s: [1, 0, 0, -1, px, py + TILE] }[s];
@@ -692,7 +692,7 @@ function drawTile(ch, px, py, tx, ty, time) {
   } else if (ch === 'h') {                           // leafy dots
     ctx.fillStyle = '#1f4d25';
     ctx.fillRect(px + 6, py + 6, 6, 6); ctx.fillRect(px + 18, py + 16, 6, 6);
-  } else if (ch === '#' && ((zoneId === 'zone1' && tx === 0) || zoneId === 'zone2')) {   // zone 1 west wall (round the glass doors) and ALL the walls of zone 2: the same pale plaster as the doors and the lift wall
+  } else if (ch === '#' && ((zoneId === 'zone1' && tx === 0) || zoneId === 'zone2' || zoneId === 'zone3')) {   // zone 1 west wall (round the glass doors) and ALL the walls of zone 2: the same pale plaster as the doors and the lift wall
     ctx.fillStyle = '#bdbab0'; ctx.fillRect(px, py, TILE, TILE);                 // the warm concrete of the stairs
     ctx.fillStyle = '#cfccc2'; ctx.fillRect(px, py, TILE, 3);
     ctx.fillStyle = '#a6a49c'; ctx.fillRect(px, py + TILE - 6, TILE, 6);
@@ -747,7 +747,7 @@ function drawTile(ch, px, py, tx, ty, time) {
     if (!stampTierBlock(px, py, tx, ty)) drawSemiWall(px, py, tx, ty, true);               // exactly the semi-wall's colour + texture, so wall and base read as one piece
   } else if (ch === 'q') {                            // hedge semi-wall
     drawSemiWall(px, py, tx, ty);
-  } else if (ch === 'S' && zoneId === 'zone1') {      // zone 1: the two railed stair flights
+  } else if (ch === 'S' && (zoneId === 'zone1' || zoneId === 'zone3')) {      // zones 1 and 3: the railed stair flights
     drawFlight(px, py, tx, ty);
   } else if (ch === 'S') {                            // stairs: horizontal steps
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -1257,7 +1257,7 @@ function drawCredits() {
   ctx.font = 'bold 20px monospace'; ctx.fillStyle = '#ffd54f'; ctx.fillText('CREDITS', 30, 44);
   ctx.font = '14px monospace'; ctx.fillStyle = '#fff';
   let y = 78;
-  y = wrap('Game: [YOUR NAMES HERE] - BRAC University, Dept. of CSE', 30, y, VW - 60, 20) + 8;
+  y = wrap('Game: Md. Fahim Hassan & Shahriar Islam Tawsifa - BRAC University, Dept. of CSE', 30, y, VW - 60, 20) + 8;
   y = wrap('Character sprite: made with the Universal LPC Spritesheet Character Generator.', 30, y, VW - 60, 20) + 8;
   y = wrap('Sprites contributed as part of the Liberated Pixel Cup project from OpenGameArt.org: http://opengameart.org/content/lpc-collection', 30, y, VW - 60, 20) + 8;
   y = wrap('License: Creative Commons Attribution-ShareAlike 3.0 (CC-BY-SA 3.0) http://creativecommons.org/licenses/by-sa/3.0/', 30, y, VW - 60, 20) + 8;
