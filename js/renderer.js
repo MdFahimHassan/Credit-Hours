@@ -39,7 +39,7 @@ const COLORS = {
   'K': '#4f4f5a',                       // storage room block (solid)
   'C': '#b8b2a4', 'T': '#b8b2a4', 'b': '#4a9a4a',   // bench + planter (floor first, drawn in drawBench / drawPlanter), bush
   'H': '#1f5a28', 'Y': '#1f5a28', 'Z': '#1f5a28',   // planted areas: hedge / bush mound / tree (drawn in drawPlanted)
-  'e': '#5b5b66', 'j': '#5b5b66',       // glass doors on the west wall (wall colour, door drawn on top)
+  'e': '#5b5b66', 'j': '#5b5b66', 'w': '#5b5b66',   // glass doors on the west wall; 'w' = curtained sliding doors on zone 3's south wall (wall colour, door drawn on top)
   'J': '#5b5b66', 'Q': '#5b5b66',       // gym door / poster wall (wall colour, details drawn on top)
   'r': '#b8453f',                       // red gym mat (walkable)
   'M': '#5b5b66', 'G': '#5b5b66',       // restroom doors (wall colour, door drawn on top)
@@ -249,6 +249,10 @@ function drawRail(px, py, tx, ty) {
   if (ty === rows - 1) edges.push('s');
   if (tx === 0) edges.push('w');
   if (tx === cols - 1 && !(zoneId === 'zone2' && ty === 0)) edges.push('e');   // (zone 2: the north-east corner tile is part of the north rail only)
+  if (getTile(tx - 1, ty) === '_') edges.push('w');                    // a rail beside a void (a bay in the edge) is an edge rail too: parapet + slats, facing the void
+  if (getTile(tx + 1, ty) === '_') edges.push('e');
+  if (getTile(tx, ty - 1) === '_') edges.push('n');
+  if (getTile(tx, ty + 1) === '_') edges.push('s');
   if (edges.length) {                                                  // on the edge of the zone: parapet + slats, outer side
     for (const s of edges) {
       const m = { e: [0, 1, -1, 0, px + TILE, py], w: [0, 1, 1, 0, px, py], n: [1, 0, 0, 1, px, py], s: [1, 0, 0, -1, px, py + TILE] }[s];
@@ -677,6 +681,7 @@ function drawBasementBlock(camera) {
 // Tiles that stand on the grey stone paving (see floor.js). Everything else keeps its flat colour from COLORS.
 const STONE_FLOOR = '.pXURCTaoc12345678m';
 function drawTile(ch, px, py, tx, ty, time) {
+  if (ch === '_') return;                                  // void (a "bay" in the edge, see skyline.js BAYS): nothing is drawn, the skyline picture under the tiles shows
   if (STONE_FLOOR.includes(ch)) {
     ctx.drawImage(getFloor(zoneId, cols, rows), px, py, TILE, TILE, px, py, TILE, TILE);   // 32x32 piece of the pre-painted stone floor
   } else {
@@ -700,6 +705,7 @@ function drawTile(ch, px, py, tx, ty, time) {
     const wf = zoneId === 'zone1' && WATER_FILTERS.find((f) => ty >= f.y0 && ty <= f.y1);
     if (wf) drawWaterFilter(px, py, ty, wf);
     if (zoneId === 'zone2') drawRestroomWall(px, py, tx, ty);   // signs / lamp / bucket / louvers beside the restroom doors
+    if (zoneId === 'zone3' && ty === 28 && tx >= 1 && tx <= 9) { ctx.fillStyle = '#e0a82e'; ctx.fillRect(px, py, TILE, 3); }   // yellow floor line along the foot of the curtained doors (see drawCurtainDoor)
   } else if (ch === '#') {
     ctx.fillStyle = '#44444d'; ctx.fillRect(px, py + TILE - 6, TILE, 6);
     ctx.fillStyle = 'rgba(0,0,0,0.10)'; ctx.fillRect(px + 10, py, 1, TILE - 6); ctx.fillRect(px + 21, py, 1, TILE - 6);   // board-formed concrete seams
@@ -717,6 +723,8 @@ function drawTile(ch, px, py, tx, ty, time) {
     ctx.fillStyle = '#e0a82e'; ctx.fillRect(px, py, 3, TILE);
   } else if (ch === 'e' || ch === 'j') {              // two glass doors, top-left wall
     drawGlassDoor(ch, px, py, tx, ty);
+  } else if (ch === 'w') {                            // curtained sliding glass doors, zone 3 south wall
+    drawCurtainDoor(px, py, tx, ty);
   } else if (ch === 'J' || ch === 'Q') {              // gym facade (west wall, faces east)
     drawGymWall(ch, px, py, tx, ty);
   } else if (ch === 'M' || ch === 'G') {              // restroom doors (see drawRestroomDoor)
@@ -770,6 +778,47 @@ function drawTile(ch, px, py, tx, ty, time) {
 // slightly blue glass (the bright day outside shows through), a dark handle on the middle stile and a plain threshold.
 // Each door is 2 tiles long (64px). Like the lifts/gym it is drawn as a front view and turned a quarter turn, so
 // left -> right on the front view = SOUTH -> NORTH on the map. The southern tile of a door is its left half.
+// ---- zone 3: curtained sliding glass doors on the SOUTH wall (the doors of the real terrace: thick grey aluminium frames, three sliding panels,
+// white sheer curtains with soft folds behind the glass, one panel with a beige curtain, dark pull handles on the meeting stiles, a yellow line on the floor).
+// Same idea as drawGlassDoor(): a 64x32 front view per door (one tile = half of it), here flipped so the FLOOR side (threshold + yellow line) is the
+// NORTH edge of the tile, where the player stands, and the lintel is on the south edge. 'w' tiles come in pairs: west half, east half.
+function drawCurtainDoor(px, py, tx, ty) {
+  const east = getTile(tx - 1, ty) === 'w';                       // is this the east half (right half) of its door?
+  const off = east ? TILE : 0, first = east ? tx - 1 : tx;
+  const warm = first === 4;                                        // only the middle door has a beige curtain on its first panel (like the photo)
+  const panes = [[5, 17], [24, 17], [43, 16]];                    // [x, width] of each panel in the 64px front view
+  ctx.save();
+  ctx.beginPath(); ctx.rect(px, py, TILE, TILE); ctx.clip();
+  ctx.translate(px, py + TILE); ctx.scale(1, -1); ctx.translate(-off, 0);   // 0..64 along the door (west -> east), y 0 = lintel (south), y 32 = floor (north)
+  const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+  R(0, 0, 64, TILE, '#d9d7d0'); R(0, 0, 64, 3, '#eceae4');         // pale plaster wall + lit lintel edge
+  R(0, 26, 64, 6, '#c2c0b8');                                      // wall foot
+  R(2, 4, 60, 24, '#4d5156');                                      // dark reveal round the frame
+  R(3, 5, 58, 22, '#a6a7ac');                                      // thick aluminium frame
+  R(3, 5, 58, 1, '#c9cacd'); R(3, 26, 58, 1, '#6e7075');           // lit top / shaded bottom of the frame
+  panes.forEach(([x, w], i) => {
+    R(x, 6, w, 20, '#cfdfe2');                                     // daylight in the glass
+    const beige = warm && i === 0;
+    R(x, 6, w, 20, beige ? '#d9c898' : '#dde2e1');                 // the curtain behind the glass
+    for (let k = 0; k < w; k += 3) {                               // soft vertical folds
+      R(x + k, 6, 1, 20, beige ? 'rgba(110,80,35,0.28)' : 'rgba(110,122,128,0.30)');
+      R(x + k + 1, 6, 1, 20, 'rgba(255,255,255,0.32)');
+    }
+    if (beige) { R(x + w - 6, 6, 6, 20, '#dde2e1'); R(x + 2, 12, 2, 11, 'rgba(40,36,30,0.55)'); }   // the curtain is only half drawn, a dark tie-back
+    R(x, 6, w, 2, 'rgba(80,90,95,0.38)');                          // gathered top of the curtain
+    R(x, 24, w, 2, 'rgba(80,90,95,0.30)');                         // hem
+    R(x + 2, 7, 2, 18, 'rgba(255,255,255,0.40)');                  // sheen on the glass
+    if (i > 0) {                                                   // meeting stile where one panel slides over the next
+      R(x - 3, 5, 3, 22, '#8c8d92'); R(x - 3, 5, 1, 22, '#c8c9cd'); R(x - 1, 5, 1, 22, '#5d5e63');
+      R(x - 2, 12, 1, 8, '#1b1b22');                               // dark pull handle
+    }
+  });
+  R(2, 27, 60, 2, '#3a3d42');                                      // threshold / sliding track
+  R(0, 29, 64, 3, '#e0a82e');                                      // yellow line on the floor along the foot of the doors
+  R(0, 29, 64, 1, 'rgba(255,255,255,0.25)');
+  ctx.restore();
+}
+
 function drawGlassDoor(ch, px, py, tx, ty) {
   const north = getTile(tx, ty - 1) !== ch;                       // is this the northern tile (right half) of its door?
   const off = north ? TILE : 0;

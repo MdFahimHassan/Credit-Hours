@@ -2,6 +2,7 @@
 // Other files import cols/rows/items/spawn... as "live bindings", so they update automatically
 // when loadZone() switches zones.
 import { ZONES } from './zones.js';
+import { holeBands } from './hole.js';
 export const TILE = 32;
 
 export const UP_ROWS = 11;                  // see upperTile() below
@@ -13,6 +14,7 @@ export const grid = [];                      // grid[y][x] = a single tile chara
 export let spawn = { x: 1, y: 1 };
 export let npcSpawn = { x: 2, y: 2 };
 export let items = [];                       // [{x, y, collected}] in tile coordinates
+export let holes = [];                       // capsule-shaped openings in the floor, in PIXELS: [{x, y, w, h}] - from the zone's `holes` (tile units), see hole.js
 export let thinWalls = [];                   // solid pixel rectangles thinner than a tile (the stair handrails) - see buildThinWalls()
 const itemCache = {};                        // keeps the ID card "collected" when you leave and come back
 
@@ -40,6 +42,7 @@ export function loadZone(id) {
   }
   if (!itemCache[id]) itemCache[id] = found;
   items = itemCache[id];
+  holes = (zone.holes ?? []).map((h) => ({ x: h.x * TILE, y: h.y * TILE, w: h.w * TILE, h: h.h * TILE, r: h.r === undefined ? undefined : h.r * TILE }));
   buildThinWalls();
 }
 loadZone('zone1');                           // the game starts in zone 1
@@ -70,7 +73,7 @@ export function getTile(tx, ty) {
   return grid[ty][tx];
 }
 export const swim = { on: false };   // true while the player is in the zone 2 pool: the water ('~') is then open to him (the rim 'B' stays solid, so the steel ladder is the only way in or out)
-const SOLID_TILES = '#RLlAfdDvEFB~MGKCTWHYZJQaoc12345678qmkej';   // H = hedge, Y = bush mound, Z = tree, J = gym door, Q = gym poster wall, c = pillar, 1-6 = amphitheatre tiers, m = flat base slab under the tiers, q = hedge semi-wall (all solid)
+const SOLID_TILES = '#RLlAfdDvEFB~MGKCTWHYZJQaoc12345678qmkejw_';   // H = hedge, Y = bush mound, Z = tree, J = gym door, Q = gym poster wall, c = pillar, 1-6 = amphitheatre tiers, m = flat base slab under the tiers, q = hedge semi-wall (all solid)
 export const isSolid = (tx, ty) => { const c = getTile(tx, ty); return c === '~' ? !swim.on : SOLID_TILES.includes(c); };
 
 // Exit info for a tile of the current zone (or null)
@@ -95,6 +98,7 @@ export const POOL_PROPS = {
 // these rectangles must match that drawing. A flight lane is 32px wide, so the 20px player still fits either side of it.
 function buildThinWalls() {
   thinWalls = [];
+  for (const h of holes) thinWalls.push(...holeBands(h));          // every hole is solid, following its curve exactly (hole.js)
   if (zoneId === 'zone2') {                                         // the Robotics Lab test pool: the signboard and the two operators block the player (see pool.js)
     const { sign, operators } = POOL_PROPS;
     thinWalls.push({ x: sign.tx * TILE - 2, y: sign.ty * TILE + 15, w: TILE + 4, h: 14 });   // the board is wide and low: it blocks the width of its tile

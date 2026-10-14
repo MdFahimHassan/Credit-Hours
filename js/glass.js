@@ -13,7 +13,8 @@
 //   - gossip circles 3-5 people standing in a loose circle, facing each other (circles break up and re-form)
 //
 // Every block of 'W' tiles in a zone becomes one platform. The bottom row of a block shows a louvered front.
-import { TILE, getTile, zoneId, cols, rows } from './map.js';
+import { TILE, getTile, zoneId, cols, rows, holes } from './map.js';
+import { holeInner, drawHoleInterior, drawHoleRail } from './hole.js';
 import { drawStudent, prepareVariants, VARIANT_COUNT } from './sprites.js';
 
 export const FRONT_H = 10;              // height (px) of the louvered FRONT face (bottom edge)
@@ -37,10 +38,20 @@ const fract = (v) => v - Math.floor(v);
 const hash = (a, b, c = 0) => fract(Math.sin(a * 12.9898 + b * 78.233 + c * 37.719) * 43758.5453);
 
 // ---- find the glass in the current zone (cached per zone) ----
-let cachedZone = null, glass = [], bbox = null;
+let cachedZone = null, glass = [], bbox = null, holeClip = null;
 function scan() {
   if (cachedZone === zoneId) return;
-  cachedZone = zoneId; glass = []; bbox = null;
+  cachedZone = zoneId; glass = []; bbox = null; holeClip = null;
+  if (holes.length) {                              // holes (hole.js): the same lower floor + crowd, seen through capsule-shaped openings, no glass on top
+    holeClip = new Path2D();
+    let hx0 = Infinity, hy0 = Infinity, hx1 = -Infinity, hy1 = -Infinity;
+    for (const h of holes) {
+      holeClip.addPath(holeInner(h));
+      hx0 = Math.min(hx0, h.x); hy0 = Math.min(hy0, h.y - 20); hx1 = Math.max(hx1, h.x + h.w); hy1 = Math.max(hy1, h.y + h.h);   // (20px above: the fence is drawn up there)
+    }
+    bbox = { x: hx0, y: hy0, w: hx1 - hx0, h: hy1 - hy0, cx: (hx0 + hx1) / 2, cy: (hy0 + hy1) / 2 };
+    return;
+  }
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (let ty = 0; ty < rows; ty++) for (let tx = 0; tx < cols; tx++) {
     if (getTile(tx, ty) !== 'W') continue;
@@ -313,8 +324,8 @@ export function drawGlassTops(ctx, time, camera, VW, VH) {
   stepCrowd(dt);
 
   ctx.save();
-  const clip = new Path2D();
-  for (const t of glass) clip.rect(t.tx * TILE + t.lx, t.ty * TILE, t.tw, t.top);
+  let clip = holeClip;
+  if (!clip) { clip = new Path2D(); for (const t of glass) clip.rect(t.tx * TILE + t.lx, t.ty * TILE, t.tw, t.top); }
   ctx.clip(clip);
 
   // parallax: the floor below is far away, so it slides less than the roof when the camera moves
@@ -355,6 +366,13 @@ export function drawGlassTops(ctx, time, camera, VW, VH) {
 
   // 3) depth dimmer: the floor below is in shade
   ctx.fillStyle = `rgba(14,24,32,${DIM})`; ctx.fillRect(bbox.x, bbox.y, bbox.w, bbox.h);
+
+  if (holeClip) {                                                          // a hole: no glass - the shaft walls, then the fence round it (hole.js)
+    for (const h of holes) drawHoleInterior(ctx, h);
+    ctx.restore();
+    for (const h of holes) drawHoleRail(ctx, h);
+    return;
+  }
 
   // 4) the glass ------------------------------------------------------------
   ctx.fillStyle = `rgba(170,208,222,${GLASS_TINT})`; ctx.fillRect(bbox.x, bbox.y, bbox.w, bbox.h);   // blue-green tint
