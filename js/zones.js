@@ -183,42 +183,41 @@ export const ZONES = {
     name: 'Lawn Zone',
     spawn: { x: 10, y: 28 },
     rows: [
-      "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
-      "R..............................................................R",
-      "R..............................................................R",
-      "R..............................................................R",
-      "R..............................................................R",
-      "X..............................................................R",
-      "R..............................................................R",
-      "R..............................................................R",
-      "R..............................................................R",
-      "R..............................................................R",
-      "R..............................................................R",
-      "R..........qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq..........R",
-      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "X..........qggggggggggggggggqSSqqSSqggggggggggggggggq..........R",
-      "X..........qggggggggggggggggqSSqqSSqggggggggggggggggq..........R",
-      "#ww#ww#ww#.qqqqqqqqqqqqqqqqqqSSqqSSqqqqqqqqqqqqqqqqqq###########",
-      "##########X#################qSSqqSSq############################",
+      "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
+      "R...................................................................R",
+      "R...................................................................R",
+      "R...................................................................R",
+      "R...................................................................R",
+      "R...................................................................R",
+      "R...................................................................R",
+      "R...................................................................R",
+      "R.CCC...............................................................R",
+      "R.CTC...............................................................R",
+      "R.CTC...............................................................R",
+      "R.CCC...........qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq..........R",
+      "R.CTC...........qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R.CTC...........qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R.CCC...........qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "X...............qggggggggggggggggqSSqqSSqggggggggggggggggq..........R",
+      "X...............qggggggggggggggggqSSqqSSqggggggggggggggggq..........R",
+      "#ww#ww#ww#.#####qqqqqqqqqqqqqqqqqqSSqqSSqqqqqqqqqqqqqqqqqq###########",
+      "##########X######################qSSqqSSq############################",
     ],
     exits: {
       // the 1-tile entry path from zone 1 (zone 1's up-path at x 1) - it now runs at x 10, right beside the lawn's west border (x 11)
       '10,29': { to: 'zone1', spawn: { x: 1, y: 1 }, facing: 'down', label: 'Entry path' },
-      // west paths (zone 4 was removed - the rooftop is L-shaped). The lower one leads to zone 2's north corridor; the upper one is still to be connected
-      '0,5':  { label: 'West path (upper)' },
+      // west path (zone 4 was removed - the rooftop is L-shaped). The upper west path (old exit at (0,5)) was removed: that tile is now plain rail. The lower one leads to zone 2's north corridor
       // the 2-wide railed path from zone 2's north corridor, in the bottom-left corner of the west edge (zone 2 rows 1-2 <-> rows 26-27 here)
       '0,26': { to: 'zone2', spawn: { x: 29, y: 1 }, facing: 'left', label: 'West path (lower)' },
       '0,27': { to: 'zone2', spawn: { x: 29, y: 2 }, facing: 'left', label: 'West path (lower)' },
@@ -236,8 +235,8 @@ export const ZONES = {
 
 // ---- Zone 3 <-> zone 1 links -------------------------------------------------------------
 // The 1-tile entry path ((10,29) in zone 3 <-> zone 1's up-path at (1,0)) is listed in the two zone blocks.
-// Stairs: zone 3 has two railed flights (x 29-30 and x 33-34, rows 26-29) that match zone 1's two flights (x 9-10 and x 13-14, rows 0-4), lane for lane.
-const FLIGHTS = [[9, 29], [10, 30], [13, 33], [14, 34]];       // [x in zone 1, x in zone 3]
+// Stairs: zone 3 has two railed flights (x 34-35 and x 38-39, rows 26-29) that match zone 1's two flights (x 9-10 and x 13-14, rows 0-4), lane for lane.
+const FLIGHTS = [[9, 34], [10, 35], [13, 38], [14, 39]];       // [x in zone 1, x in zone 3]
 for (const [x1, x3] of FLIGHTS) {
   ZONES.zone3.exits[x3 + ',29'] = { to: 'zone1', spawn: { x: x1, y: 1 }, facing: 'down', label: 'Stairs' };
   ZONES.zone1.exits[x1 + ',0']  = { to: 'zone3', spawn: { x: x3, y: 25 }, facing: 'up', label: 'Stairs' };
