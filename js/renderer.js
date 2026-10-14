@@ -1,5 +1,6 @@
 // renderer.js - ALL drawing lives here. Game logic never touches the canvas.
-import { TILE, cols, rows, widthPx, heightPx, getTile, isSolid, items, zoneId } from './map.js';
+import { TILE, cols, rows, widthPx, heightPx, getTile, isSolid, items, zoneId, curvedRails, inCurvedRail } from './map.js';
+import { railPath, RAIL_W } from './curverail.js';
 import { transition } from './transition.js';
 import { quest } from './quest.js';
 import { dialogue } from './dialogue.js';
@@ -8,7 +9,7 @@ import { intro } from './intro.js';
 import { drawWell, wellBox, wellTiles } from './escalator.js';
 import { drawCharacter } from './sprites.js';
 import { drawGlassFront, drawGlassTops } from './glass.js';
-import { skyline, drawSkyline } from './skyline.js';
+import { skyline, drawSkyline, drawCurvedBays } from './skyline.js';
 import { setVirtualUp, UP_ROWS, WATER_FILTERS } from './map.js';
 import { getFloor } from './floor.js';
 import { paintHedge, hedgeBase, buildOverlay } from './foliage.js';
@@ -243,16 +244,13 @@ function railPiece(idx, hasPrev, hasNext, slatH, paraH, parapet, seed) {
 function inFrame(m, fn) { ctx.save(); ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]); fn(); ctx.restore(); }
 
 function drawRail(px, py, tx, ty) {
+  if (inCurvedRail(tx, ty)) return;                                    // part of a curved rail: drawn as one piece by drawCurvedRails()
   const seed = tx * 7 + ty;
   const edges = [];
   if (ty === 0) edges.push('n');
   if (ty === rows - 1) edges.push('s');
   if (tx === 0) edges.push('w');
   if (tx === cols - 1 && !(zoneId === 'zone2' && ty === 0)) edges.push('e');   // (zone 2: the north-east corner tile is part of the north rail only)
-  if (getTile(tx - 1, ty) === '_') edges.push('w');                    // a rail beside a void (a bay in the edge) is an edge rail too: parapet + slats, facing the void
-  if (getTile(tx + 1, ty) === '_') edges.push('e');
-  if (getTile(tx, ty - 1) === '_') edges.push('n');
-  if (getTile(tx, ty + 1) === '_') edges.push('s');
   if (edges.length) {                                                  // on the edge of the zone: parapet + slats, outer side
     for (const s of edges) {
       const m = { e: [0, 1, -1, 0, px + TILE, py], w: [0, 1, 1, 0, px, py], n: [1, 0, 0, 1, px, py], s: [1, 0, 0, -1, px, py + TILE] }[s];
@@ -267,6 +265,61 @@ function drawRail(px, py, tx, ty) {
   if (!h && !v) h = true;
   if (h) inFrame([1, 0, 0, 1, px, py + 6], () => railPiece(tx, isRail(tx - 1, ty), isRail(tx + 1, ty), 16, 3, false, seed));
   if (v) inFrame([0, 1, 1, 0, px + 6, py], () => railPiece(ty, isRail(tx, ty - 1), isRail(tx, ty + 1), 16, 3, false, seed));
+}
+
+// ---- curved rails (curverail.js) ---------------------------------------------------------------------------------------
+// The west rail of zone 3 steps in beside the hole and back out in smooth bends. It looks exactly like a straight edge rail tile (concrete parapet
+// under steel slats, a post every ~4 tiles and at the end) but is painted ONCE along the true curve: every band is one smooth polygon between
+// two offsets of the centre line (exact tangents, 0.5px steps), so the edges stay clean. The slat pitch is stretched by a hair (7.9 - 8.1px) so that the
+// pattern joins the straight rail tiles at both ends. The skyline outside the curve is painted by skyline.js drawCurvedBays().
+const curvedImgs = new Map();
+function buildCurvedRail(c) {
+  const { pts, len } = railPath(c), K = pts.length - 1, PAD = 4;
+  const w = Math.ceil(c.depth + RAIL_W + 2 * PAD), h = Math.ceil(c.y1 - c.y0 + 2 * PAD);
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const g = cv.getContext('2d'), ox = PAD, oy = PAD - c.y0;
+  const sAt = (k) => k * len / K, kAt = (s) => Math.max(0, Math.min(K, Math.round(s * K / len)));
+  // one band between offsets dA and dB (px inwards from the outer face) over the points k0..k1, as a single path
+  const band = (k0, k1, dA, dB, fill) => {
+    if (k1 <= k0) return;
+    g.fillStyle = fill; g.beginPath();
+    for (let k = k0; k <= k1; k++) { const f = pts[k]; (k === k0 ? g.moveTo : g.lineTo).call(g, f.x + f.ty * dA + ox, f.y - f.tx * dA + oy); }
+    for (let k = k1; k >= k0; k--) { const f = pts[k]; g.lineTo(f.x + f.ty * dB + ox, f.y - f.tx * dB + oy); }
+    g.closePath(); g.fill();
+  };
+  const span = (s0, s1, dA, dB, fill) => band(kAt(s0), kAt(s1), dA, dB, fill);   // the same, over a stretch of arc length s0..s1
+  const N = Math.max(1, Math.round(len / 8)), P = len / N, u = P / 8;           // N slats' worth of pitch, one `u` = one "pixel" of the straight tile pattern
+  // the dark drop seen between the slats (the same gradient as the lip of a straight edge, skyline.js)
+  for (let d = 0; d < 16; d += 2) {
+    const t = d / 24, mix = (a, b) => Math.round(a + (b - a) * t);
+    band(0, K, d, d + 2, `rgb(${mix(0x4a, 0x2b)},${mix(0x47, 0x28)},${mix(0x40, 0x24)})`);
+  }
+  // Everything is laid out from the END of the rail (s' = distance from the path end), so the slats, seams and posts continue the path's own rail (skyline.js railRun) without a break
+  const from = (s0, s1, dA, dB, fill) => span(len - s1, len - s0, dA, dB, fill);
+  // concrete parapet (n 16-24): lighter cap, board seams, weathering, dark base
+  band(0, K, 16, 24, RC.para); band(0, K, 16, 18, RC.cap); band(0, K, 22, 24, 'rgba(0,0,0,0.22)');
+  for (let m = 0; m * 16 * u < len; m++) { from(m * 16 * u, m * 16 * u + u, 18, 22, RC.seam); }
+  for (let m = 0; m < N / 4; m++) from((m * 4 + 1 + rnd(m, 3) * 2.6) * 8 * u, (m * 4 + 1 + rnd(m, 3) * 2.6) * 8 * u + 3 * u, 17, 22, RC.stain);
+  // the slats: 4 wide every 8, lit face on the side nearest the path, dark edge on the other
+  for (let m = 0; m < N; m++) {
+    const a = m * P + 2 * u, b = m * P + 6 * u;
+    from(a, b, 2, 15, RC.slat); from(a, a + u, 2, 15, RC.lit); from(b - u, b, 2, 15, RC.dark);
+  }
+  span(0, len, 0, 2, RC.bar); span(0, len, 14, 16, RC.bar); span(0, len, 2, 3, RC.barShade);   // top bar, bottom bar
+  // posts: about every 4 tiles from the path's own end post (at s' = 0, drawn by the path's rail); none at the start, where the straight edge rail goes on
+  const posts = Math.max(1, Math.round(len / 128));
+  for (let j = 1; j < posts; j++) { const s0 = len * j / posts - 1.5 * u; from(s0, s0 + 3 * u, 0, 16, RC.post); from(s0 + 2 * u, s0 + 3 * u, 0, 16, RC.dark); }
+  return { cv, x: -ox, y: -oy };
+}
+function drawCurvedRails(time) {
+  for (const c of curvedRails) {
+    if (c.y0 > camera.y + VH || c.y1 < camera.y || camera.x > c.depth + RAIL_W) continue;
+    drawCurvedBays(ctx, camera, VW, VH, time);                          // the skyline outside the curve (over the floor tiles under it)
+    const key = zoneId + '|' + c.y0;
+    if (!curvedImgs.has(key)) curvedImgs.set(key, buildCurvedRail(c));
+    const im = curvedImgs.get(key);
+    ctx.drawImage(im.cv, im.x, im.y);
+  }
 }
 
 // ---- the nose of the escalator railing (zone 1) -----------------------------------------------------------------------
@@ -681,7 +734,6 @@ function drawBasementBlock(camera) {
 // Tiles that stand on the grey stone paving (see floor.js). Everything else keeps its flat colour from COLORS.
 const STONE_FLOOR = '.pXURCTaoc12345678m';
 function drawTile(ch, px, py, tx, ty, time) {
-  if (ch === '_') return;                                  // void (a "bay" in the edge, see skyline.js BAYS): nothing is drawn, the skyline picture under the tiles shows
   if (STONE_FLOOR.includes(ch)) {
     ctx.drawImage(getFloor(zoneId, cols, rows), px, py, TILE, TILE, px, py, TILE, TILE);   // 32x32 piece of the pre-painted stone floor
   } else {
@@ -1174,6 +1226,7 @@ export function render(game, time) {
   for (let ty = y0; ty <= y1; ty++)
     for (let tx = x0; tx <= x1; tx++)
       drawTile(getTile(tx, ty), tx * TILE, ty * TILE, tx, ty, time);
+  drawCurvedRails(time);                             // zone 3: the curved west rail (+ the skyline outside it)
   for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) if (getTile(tx, ty) === 'T') drawCrown(ctx, tx * TILE + 16, ty * TILE + 15, tx, ty, 19);   // the sitting-area trees: crowns drawn over their planters
   if (zoneId === 'zone2') drawPool(ctx, time);       // the Robotics Lab test pool: water, robots, ripples
   if (zoneId === 'zone1') drawEscalatorNose(x0, x1, y0, y1, time);

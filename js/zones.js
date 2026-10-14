@@ -200,15 +200,15 @@ export const ZONES = {
       "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
       "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
       "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "###........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "___R.......qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "___R.......qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "___R.......qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "___R.......qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "___R.......qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "___R.......qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "___R.......qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "###........qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R..........qggggggggggggggggggggggggggggggggggggggggq..........R",
       "X..........qggggggggggggggggqSSqqSSqggggggggggggggggq..........R",
       "X..........qggggggggggggggggqSSqqSSqggggggggggggggggq..........R",
       "#ww#ww#ww#.qqqqqqqqqqqqqqqqqqSSqqSSqqqqqqqqqqqqqqqqqq###########",
@@ -225,9 +225,12 @@ export const ZONES = {
     },
     // capsule-shaped holes you can look down through, ringed by a balustrade (hole.js). Tile units: x, y, w, h of the OUTER edge.
     // This one sits opposite the curtained doors: 4 wide x 8 tall (x6-9, rows 18-25), 2 tiles of path in front of it (rows 26-27) and 1 tile on its right (x10).
-    // r = corner radius in tiles (leave it out for the full capsule, r: 2 here). On its left the west rail steps in (the "bay": void tiles _ at x0-2, rows 18-24,
-    // the rail at x3, plaster returns on rows 17 and 25) so there are 2 tiles of path (x4-5) between the rail and the hole - see skyline.js BAYS.
+    // r = corner radius in tiles (leave it out for the full capsule, r: 2 here).
     holes: [{ x: 6, y: 18, w: 4, h: 8, r: 1 }],
+    // curved rails (curverail.js): the west rail steps in 3 tiles beside the hole (straight at x3, rows 19-24) like the hole's own balustrade: straight runs with rounded
+    // corners (r: 1 tile) only at the turns - across on rows 17 and 25, where the old walls were. The lower return runs straight into the rail of the path to zone 2.
+    // The skyline stays one straight picture to the left of it. The x0 tiles of rows 17-25 are 'R' (solid) but are not drawn: the curve is.
+    curvedRails: [{ y0: 17, y1: 26, depth: 3, r: 1 }],
   },
 };
 
