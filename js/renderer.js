@@ -1,5 +1,5 @@
 // renderer.js - ALL drawing lives here. Game logic never touches the canvas.
-import { TILE, cols, rows, widthPx, heightPx, getTile, isSolid, items, zoneId, curvedRails, inCurvedRail } from './map.js';
+import { TILE, cols, rows, widthPx, heightPx, getTile, isSolid, items, zoneId, curvedRails, inCurvedRail, lawnBox, RAIL_UP, fences } from './map.js';
 import { railPath, RAIL_W } from './curverail.js';
 import { transition } from './transition.js';
 import { quest } from './quest.js';
@@ -28,7 +28,7 @@ const COLORS = {
   '#': '#5b5b66', '.': '#8f8f8b', '~': '#3a7bd5', 'h': '#2e6b34', 'g': '#4caf50',   // generic
   'p': '#a9a28e',                       // path
   'R': '#b8b2a4',                       // railing (floor drawn first, bars on top)
-  'S': '#d3d1c7',                       // stairs
+  'S': '#d3d1c7', 'u': '#bdbab0', 'y': '#bdbab0',       // stairs; 'u' = the 2-wide flight up to the lawn (zone 3)
   '1': '#8f8f8b', '2': '#8f8f8b', '3': '#8f8f8b', '4': '#8f8f8b', '5': '#8f8f8b', '6': '#8f8f8b', '7': '#8f8f8b', '8': '#8f8f8b', 'q': '#a6a49c', 'm': '#8f8f8b',   // amphitheatre tiers (and 'm' = their flat base slab): stone floor under them, slabs drawn by drawTier
   'L': '#b9573a', 'l': '#cfd2d6', 'f': '#e4e6e9', 'd': '#e4e6e9', 'A': '#cfd2d6',   // elevator wall (drawn by drawLiftWall)
   'D': '#9c6428',                       // store room door
@@ -123,7 +123,7 @@ function railV(x, y, east, g = ctx, sh = true) {          // vertical rail segme
 // The two hedge beds beside the stairs (zone 1, rows 0-5: x3-5 and x18-20) sit against the semi-wall and the steps, which are solid, so they
 // used to get no guard rail. A rail is now drawn on those faces too (same rail as every other hedge). The top edge (map edge) stays open.
 const isStairBed = (x, y) => zoneId === 'zone1' && y >= 0 && y <= 5 && ((x >= 3 && x <= 5) || (x >= 18 && x <= 20));
-const isRailable = (x, y, fx, fy) => !isPlanted(x, y) && getTile(x, y) !== 'g' && (!isSolid(x, y) || (isStairBed(fx, fy) && (getTile(x, y) === 'q' || getTile(x, y) === 'm' || isTierCh(getTile(x, y)))));   // (fx, fy) = the hedge tile asking
+const isRailable = (x, y, fx, fy) => !isPlanted(x, y) && getTile(x, y) !== 'g' && getTile(x, y) !== 'y' &&   /* (the lawn-step landing has its own white fence) */ (!isSolid(x, y) || (isStairBed(fx, fy) && (getTile(x, y) === 'q' || getTile(x, y) === 'm' || isTierCh(getTile(x, y)))));   // (fx, fy) = the hedge tile asking
 function drawGuardRail(px, py, tx, ty) {
   const open = (x, y) => isRailable(x, y, tx, ty);   // floor / path next to the planted area (or the wall / steps beside a stair-side bed)
   if (open(tx, ty - 1)) railH(px, py);
@@ -653,8 +653,127 @@ function drawSemiWall(px, py, tx, ty, base = false) {   // base = the 'm' slab a
     ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(px + 10, py + body, 1, 9); ctx.fillRect(px + 21, py + body, 1, 9);
   }
 }
+
+// ---- white rail round the lawn (zone 3) -------------------------------------------------------------------------------
+// Copied from the photos of the real lawn: on top of the low concrete border wall stands a WHITE aluminium railing - a flat top rail, stout square posts
+// every four balusters (64px) and thin round balusters every 16px between them, all see-through to the grass. It runs along the whole border (the wall tiles 'q' on
+// the outline of the lawn, see map.js lawnBox) as ONE rail through the corners (it turns on the centre line of the wall: x + 16 / y + 18), and stops where the wall
+// does (the entrance, the stairs down to zone 1) with a post at the end. Drawn in the same oblique view as the hole's balustrade: the foot is on the wall's cap,
+// everything stands RAIL_UP px up the screen. Each wall tile is a depth-sorted entity (see render()): the rail is drawn over a player standing north of it.
+const RAIL_BASE = 18;                                                          // y of the foot of the rail inside a wall tile (horizontal runs)
+const lawnWall = (x, y) => {
+  const L = lawnBox();
+  return !!L && getTile(x, y) === 'q' && x >= L.x0 && x <= L.x1 && y >= L.y0 && y <= L.y1 && (x === L.x0 || x === L.x1 || y === L.y0 || y === L.y1);
+};
+function lawnRailEntities(x0, x1, y0, y1) {
+  const out = [];
+  if (!lawnBox()) return out;
+  for (let ty = Math.max(0, y0 - 1); ty <= Math.min(rows - 1, y1 + 1); ty++) for (let tx = x0; tx <= x1; tx++)
+    if (lawnWall(tx, ty)) out.push({ y: (ty + 1) * TILE, draw: () => drawLawnRail(tx * TILE, ty * TILE, tx, ty) });
+  return out;
+}
+function drawLawnRail(px, py, tx, ty) {
+  const L = lawnBox(), W = '#eef0f2', W2 = '#c9ced3', SH = 'rgba(20,24,30,0.30)';
+  const post = (x, y) => {                                                       // a square post (x = left edge, y = foot): lit face, shaded side, flat cap
+    ctx.fillStyle = SH; ctx.fillRect(x - 1, y, 6, 2);
+    ctx.fillStyle = W2; ctx.fillRect(x, y - RAIL_UP, 4, RAIL_UP); ctx.fillStyle = W; ctx.fillRect(x, y - RAIL_UP, 2, RAIL_UP);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 0.5, y - RAIL_UP - 1, 5, 2);
+  };
+  const bar = (x, y) => { ctx.fillStyle = W2; ctx.fillRect(x, y - RAIL_UP, 2, RAIL_UP); ctx.fillStyle = W; ctx.fillRect(x, y - RAIL_UP, 1, RAIL_UP); };
+  // the positions along a run inside this tile (tA..tB): a post at the start, the end and every 64px, a baluster every 16px
+  const spots = (tA, tB, s, e) => {
+    const set = new Set();
+    for (let k = Math.max(0, Math.ceil((tA - s) / 16)); s + 16 * k <= e && s + 16 * k < tB; k++) if (s + 16 * k >= tA) set.add(s + 16 * k);
+    if (e > tA && e <= tB) set.add(e);
+    return [...set].map((pos) => ({ pos, post: pos === s || pos === e || (pos - s) % 64 === 0 }));
+  };
+  if (ty === L.y0 || ty === L.y1) {                                              // horizontal run through this tile
+    let a = tx, b = tx; while (lawnWall(a - 1, ty)) a--; while (lawnWall(b + 1, ty)) b++;
+    const s = a === L.x0 ? a * TILE + 16 : a * TILE, e = b === L.x1 ? b * TILE + 16 : (b + 1) * TILE, by = py + RAIL_BASE;
+    const lo = Math.max(px, s), hi = Math.min(px + TILE, e);
+    if (hi > lo) {
+      ctx.fillStyle = SH; ctx.fillRect(lo, by, hi - lo, 2);                       // contact shadow on the cap
+      for (const q of spots(px, px + TILE, s, e)) if (!q.post) bar(q.pos - 1, by);
+      ctx.fillStyle = W2; ctx.fillRect(lo, by - RAIL_UP, hi - lo, 3);             // top rail: flat bar, lit on top
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(lo, by - RAIL_UP, hi - lo, 1);
+      ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(lo, by - RAIL_UP + 3, hi - lo, 1);
+      for (const q of spots(px, px + TILE, s, e)) if (q.post) post(q.pos - 2, by);
+    }
+  }
+  if (tx === L.x0 || tx === L.x1) {                                              // vertical run: seen from the side, a column of bars under one top rail
+    let a = ty, b = ty; while (lawnWall(tx, a - 1)) a--; while (lawnWall(tx, b + 1)) b++;
+    const s = a === L.y0 ? a * TILE + RAIL_BASE : a * TILE, e = b === L.y1 ? b * TILE + RAIL_BASE : (b + 1) * TILE, cx = px + 16;
+    const lo = Math.max(py, s), hi = Math.min(py + TILE, e);
+    if (hi > lo) {
+      ctx.fillStyle = SH; ctx.fillRect(cx + 2, lo, 2, hi - lo);
+      for (const q of spots(py, py + TILE, s, e)) if (!q.post) bar(cx - 1, q.pos);
+      ctx.fillStyle = W2; ctx.fillRect(cx - 2, lo - RAIL_UP, 4, hi - lo); ctx.fillStyle = W; ctx.fillRect(cx - 2, lo - RAIL_UP, 2, hi - lo);   // top rail seen end-on
+      for (const q of spots(py, py + TILE, s, e)) if (q.post) post(cx - 2, q.pos);
+    }
+  }
+}
+
+// ---- free-standing white fences (zone 3 `fences`: e.g. round the landing at the top of the lawn steps) ----------------------------------------------------------
+// The same white aluminium rail as the lawn's, drawn along a chain of points (the foot line): posts at the ends and every 64px, balusters every 16px, a top rail.
+function drawFence(pts) {
+  const W = '#eef0f2', W2 = '#c9ced3', SH = 'rgba(20,24,30,0.30)';
+  const post = (x, y) => { ctx.fillStyle = SH; ctx.fillRect(x - 1, y, 6, 2); ctx.fillStyle = W2; ctx.fillRect(x, y - RAIL_UP, 4, RAIL_UP); ctx.fillStyle = W; ctx.fillRect(x, y - RAIL_UP, 2, RAIL_UP); ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 0.5, y - RAIL_UP - 1, 5, 2); };
+  const bar = (x, y) => { ctx.fillStyle = W2; ctx.fillRect(x, y - RAIL_UP, 2, RAIL_UP); ctx.fillStyle = W; ctx.fillRect(x, y - RAIL_UP, 1, RAIL_UP); };
+  for (let i = 1; i < pts.length; i++) {
+    const [xa, ya] = pts[i - 1], [xb, yb] = pts[i];
+    if (xa === xb) {                                                          // vertical piece (seen from the side: a column of bars under one top rail)
+      const y0 = Math.min(ya, yb), y1 = Math.max(ya, yb);
+      ctx.fillStyle = SH; ctx.fillRect(xa + 2, y0, 2, y1 - y0);
+      for (let y = y0 + 16, k = 1; y < y1; y += 16, k++) if (k % 4) bar(xa - 1, y);
+      ctx.fillStyle = W2; ctx.fillRect(xa - 2, y0 - RAIL_UP, 4, y1 - y0); ctx.fillStyle = W; ctx.fillRect(xa - 2, y0 - RAIL_UP, 2, y1 - y0);
+      for (let y = y0, k = 0; y < y1; y += 64, k++) post(xa - 2, y);
+      post(xa - 2, y1);
+    } else {                                                                  // horizontal piece
+      const x0 = Math.min(xa, xb), x1 = Math.max(xa, xb);
+      ctx.fillStyle = SH; ctx.fillRect(x0, ya, x1 - x0, 2);
+      for (let x = x0 + 16, k = 1; x < x1; x += 16, k++) if (k % 4) bar(x - 1, ya);
+      ctx.fillStyle = W2; ctx.fillRect(x0, ya - RAIL_UP, x1 - x0, 3); ctx.fillStyle = '#ffffff'; ctx.fillRect(x0, ya - RAIL_UP, x1 - x0, 1);
+      ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(x0, ya - RAIL_UP + 3, x1 - x0, 1);
+      for (let x = x0, k = 0; x < x1; x += 64, k++) post(x - 2, ya);
+      post(x1 - 2, ya);
+    }
+  }
+}
+function fenceEntities(camera) {
+  const out = [];
+  for (const f of fences) {
+    const xs = f.pts.map((p) => p[0]), ys = f.pts.map((p) => p[1]);
+    if (Math.max(...xs) + 8 < camera.x || Math.min(...xs) - 8 > camera.x + VW || Math.max(...ys) + 8 < camera.y || Math.min(...ys) - 24 > camera.y + VH) continue;
+    // depth: the fence is drawn over a player standing north of it and under one standing on its south / inner side (the top of the fence for a vertical piece)
+    for (let i = 1; i < f.pts.length; i++) out.push({ y: f.pts[i - 1][0] === f.pts[i][0] ? Math.min(f.pts[i - 1][1], f.pts[i][1]) + 2 : f.pts[i][1] + 1, draw: () => drawFence([f.pts[i - 1], f.pts[i]]) });
+  }
+  return out;
+}
+
+// the red fire extinguisher hanging on the louvered wall of the storage room (zone 3), beside the top of the steps (x, y = top-left, 8 x 13 px)
+function drawExtinguisher(x, y) {
+  const R = (dx, dy, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x + dx, y + dy, w, h); };
+  R(0, 12, 8, 2, 'rgba(0,0,0,0.30)');                       // shadow on the floor
+  R(1, 2, 6, 1, '#3b3b42'); R(1, 3, 1, 8, '#3b3b42');       // wall bracket / strap
+  R(1, 4, 6, 8, '#c62828'); R(1, 4, 2, 8, '#e53935'); R(6, 4, 1, 8, '#8e1b1b');   // red cylinder, lit left edge, shaded right
+  R(1, 7, 6, 2, '#f2f2f2'); R(2, 7, 4, 1, '#2f2f35');      // white label
+  R(2, 3, 4, 1, '#c62828'); R(3, 1, 3, 2, '#2b2b30');       // shoulder + black valve head
+  R(1, 0, 3, 1, '#2b2b30'); R(0, 1, 1, 6, '#1c1c20');        // handle + hose hanging down the side
+}
+// the concrete landing at the top of the lawn steps (zone 3, 'y'): the colour of the treads
+function drawLanding(px, py, tx, ty) {
+  const same = (x, y) => getTile(x, y) === 'y' || getTile(x, y) === 'u';
+  ctx.fillStyle = '#bdbab0'; ctx.fillRect(px, py, TILE, TILE);
+  for (let i = 0; i < 4; i++) { ctx.fillStyle = i % 2 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.14)'; ctx.fillRect(px + 2 + Math.floor(rnd(tx, ty, i) * 28), py + 2 + Math.floor(rnd(tx, ty, i + 20) * 28), 2, 1); }
+  if (same(tx, ty + 1)) { ctx.fillStyle = 'rgba(0,0,0,0.07)'; ctx.fillRect(px, py + TILE - 1, TILE, 1); }     // faint slab joints between landing tiles
+  if (same(tx + 1, ty)) { ctx.fillStyle = 'rgba(0,0,0,0.07)'; ctx.fillRect(px + TILE - 1, py, 1, TILE); }
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';                                                                        // side shade where it meets the paving (as on the flight)
+  if (!same(tx - 1, ty)) ctx.fillRect(px, py, 2, TILE);
+  if (getTile(tx + 1, ty) === 'g') ctx.fillRect(px + TILE - 2, py, 2, TILE);
+  if (!same(tx, ty - 1) && getTile(tx, ty - 1) !== 'q') ctx.fillRect(px, py, TILE, 2);
+}
 function drawFlight(px, py, tx, ty) {
-  const top = getTile(tx, ty - 1) !== 'S', bottom = getTile(tx, ty + 1) !== 'S';
+  const me = getTile(tx, ty), top = getTile(tx, ty - 1) !== me, bottom = getTile(tx, ty + 1) !== me;
   for (let i = 0; i < 2; i++) {                                            // two small steps per tile (the flight's steps are smaller than the tiers')
     const y = py + i * 16;
     ctx.fillStyle = '#bdbab0'; ctx.fillRect(px, y, TILE, 11);               // tread
@@ -670,6 +789,14 @@ function drawFlight(px, py, tx, ty) {
     ctx.fillStyle = '#9aa2a8'; ctx.fillRect(x, py, 4, TILE);
     ctx.fillStyle = '#e3e7ea'; ctx.fillRect(x + 1, py, 2, TILE);
     if (top)    { ctx.fillStyle = '#eef1f3'; ctx.fillRect(x - 1, py, 6, 4); ctx.fillStyle = '#7d858b'; ctx.fillRect(x - 1, py + 3, 6, 1); }   // end posts
+    if (bottom) { ctx.fillStyle = '#eef1f3'; ctx.fillRect(x - 1, py + TILE - 5, 6, 5); ctx.fillStyle = '#7d858b'; ctx.fillRect(x - 1, py + TILE - 2, 6, 2); }
+  }
+  if (me === 'u' && getTile(tx + 1, ty) === 'q') {                          // the small silver handrail on the wall side of the lawn steps (as in the photo), same drawing as zone 1's
+    const x = px + TILE - 8;
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(x + 2, py + (top ? 2 : 0), 5, TILE - (top ? 2 : 0));
+    ctx.fillStyle = '#9aa2a8'; ctx.fillRect(x, py, 4, TILE);
+    ctx.fillStyle = '#e3e7ea'; ctx.fillRect(x + 1, py, 2, TILE);
+    if (top)    { ctx.fillStyle = '#eef1f3'; ctx.fillRect(x - 1, py, 6, 4); ctx.fillStyle = '#7d858b'; ctx.fillRect(x - 1, py + 3, 6, 1); }
     if (bottom) { ctx.fillStyle = '#eef1f3'; ctx.fillRect(x - 1, py + TILE - 5, 6, 5); ctx.fillStyle = '#7d858b'; ctx.fillRect(x - 1, py + TILE - 2, 6, 2); }
   }
 }
@@ -688,16 +815,20 @@ function drawFlight(px, py, tx, ty) {
 //   P_X0 / P_X1 = left / right edge of the portal (the middle tile is 32-64)     P_TOP = top edge of the portal AND of the wall piers
 //   (the wall face is as tall as the frame, so the roof gets shorter when P_TOP gets smaller)
 const P_X0 = 24, P_X1 = 72, P_TOP = 36, FRAME = 3, FLOOR_Y = 90;
-const BLOCK = { tx: 22, ty: 0 };
-function drawBasementBlock(camera) {
-  const bx = BLOCK.tx * TILE, by = BLOCK.ty * TILE;
-  if (bx > camera.x + VW || bx + 3 * TILE < camera.x || by > camera.y + VH || by + 3 * TILE < camera.y) return;
-  const R = (x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(bx + x, by + y, w, h); };
+const BLOCKS = { zone1: [{ tx: 22, ty: 0 }], zone3: [{ tx: 11, ty: 13, ext: 64, mirror: true, extinguisher: { x: 439, y: 359 } }] };   // ext = px of extra roof BEHIND the 3x3 block (zone 3: 2 more rows, the roof is 3 tiles deep)
+//   // top-left tile of each 3x3 block per zone; mirror = the louvered face is on the EAST (zone 3: it faces the stairs, as in the photo)
+function drawBasementBlocks(camera) { for (const B of BLOCKS[zoneId] ?? []) drawBasementBlock(camera, B); }
+function drawBasementBlock(camera, BLOCK) {
+  const bx = BLOCK.tx * TILE, by = BLOCK.ty * TILE, E = BLOCK.ext ?? 0;
+  if (bx > camera.x + VW || bx + 3 * TILE < camera.x || by - E > camera.y + VH || by + 3 * TILE < camera.y) return;
+  ctx.save();
+  if (BLOCK.mirror) { ctx.translate(bx + 96, by); ctx.scale(-1, 1); } else ctx.translate(bx, by);   // from here on: block-local pixels (0,0 = top-left of the block)
+  const R = (x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); };
   // roof: bands get lighter towards the tall front
-  const bh = P_TOP / 4;
-  ['#8a8880', '#94928a', '#9e9c93', '#a8a69d'].forEach((c, i) => R(0, Math.round(i * bh), 96, Math.ceil(bh), c));
-  for (const x of [10, 21, 42, 53, 74, 85]) R(x, 0, 1, P_TOP, 'rgba(0,0,0,0.08)');          // board-formed seams
-  R(0, 0, 96, 1, '#b7b5ab');                                                             // lit back edge
+  const bh = (P_TOP + E) / 4;                                                             // (E = extra roof behind the block: the roof starts E px above the block's top, y = -E)
+  ['#8a8880', '#94928a', '#9e9c93', '#a8a69d'].forEach((c, i) => R(0, Math.round(i * bh) - E, 96, Math.ceil(bh), c));
+  for (const x of [10, 21, 42, 53, 74, 85]) R(x, -E, 1, P_TOP + E, 'rgba(0,0,0,0.08)');     // board-formed seams
+  R(0, -E, 96, 1, '#b7b5ab');                                                             // lit back edge
   // front face: the two wall piers (full tiles) with seams
   R(0, P_TOP, 96, 96 - P_TOP, '#c9bda9'); R(0, P_TOP, 96, 1, '#e0d6c4'); R(0, 94, 96, 2, '#a79b88');   // the wall is as tall as the portal frame
   for (const x of [10, 85]) R(x, P_TOP + 1, 1, 94 - P_TOP - 1, 'rgba(0,0,0,0.07)');
@@ -707,9 +838,9 @@ function drawBasementBlock(camera) {
   }
   R(78, 72, 6, 10, 'rgba(0,0,0,0.05)');                                                  // old patch on the right pier
   // louvered west face
-  R(0, 0, 8, P_TOP, '#6b6a73');
-  for (let y = 2; y < P_TOP; y += 3) R(0, y, 8, 1, 'rgba(0,0,0,0.25)');
-  R(0, 0, 1, P_TOP, '#8f8e98');
+  R(0, -E, 8, P_TOP + E, '#6b6a73');
+  for (let y = 2 - E; y < P_TOP; y += 3) R(0, y, 8, 1, 'rgba(0,0,0,0.25)');
+  R(0, -E, 1, P_TOP + E, '#8f8e98');
   // the portal: pale frame (cutting up into the roof edge), then the unlit interior
   const ix0 = P_X0 + FRAME, ix1 = P_X1 - FRAME, iw = ix1 - ix0, it = P_TOP + FRAME, ih = FLOOR_Y - it;
   R(P_X0, P_TOP, P_X1 - P_X0, 96 - P_TOP, '#d8cfbd'); R(P_X0, P_TOP, P_X1 - P_X0, 1, '#ece4d3');
@@ -723,12 +854,14 @@ function drawBasementBlock(camera) {
   const k = (y) => (88 - y) / 26 * 7;
   [[88, 80, 0.40], [80, 72, 0.28], [72, 66, 0.16], [66, 61, 0.08]].forEach(([ya, yb, a]) => {
     ctx.strokeStyle = `rgba(170,178,182,${a})`; ctx.beginPath();
-    ctx.moveTo(bx + ix0 + 2.5 + k(ya), by + ya); ctx.lineTo(bx + ix0 + 2.5 + k(yb), by + yb);
-    ctx.moveTo(bx + ix1 - 2.5 - k(ya), by + ya); ctx.lineTo(bx + ix1 - 2.5 - k(yb), by + yb); ctx.stroke();
+    ctx.moveTo(ix0 + 2.5 + k(ya), ya); ctx.lineTo(ix0 + 2.5 + k(yb), yb);
+    ctx.moveTo(ix1 - 2.5 - k(ya), ya); ctx.lineTo(ix1 - 2.5 - k(yb), yb); ctx.stroke();
   });
   R(ix0, it, 3, ih, 'rgba(0,0,0,0.30)'); R(ix1 - 3, it, 3, ih, 'rgba(0,0,0,0.30)');     // shaded side walls
-  ctx.drawImage(getFloor(zoneId, cols, rows), bx + ix0, by + FLOOR_Y, iw, 96 - FLOOR_Y, bx + ix0, by + FLOOR_Y, iw, 96 - FLOOR_Y);   // landing: the same stone paving as the floor
+  ctx.drawImage(getFloor(zoneId, cols, rows), bx + (BLOCK.mirror ? 96 - ix1 : ix0), by + FLOOR_Y, iw, 96 - FLOOR_Y, ix0, FLOOR_Y, iw, 96 - FLOOR_Y);   // landing: the same stone paving as the floor
   R(ix0, FLOOR_Y, iw, 1, '#cfd3d6');                                                    // metal edge strip at the drop
+  ctx.restore();
+  if (BLOCK.extinguisher) drawExtinguisher(BLOCK.extinguisher.x, BLOCK.extinguisher.y);
 }
 
 // Tiles that stand on the grey stone paving (see floor.js). Everything else keeps its flat colour from COLORS.
@@ -805,9 +938,11 @@ function drawTile(ch, px, py, tx, ty, time) {
     if (!stampTierBlock(px, py, tx, ty)) drawTier(px, py, tx, ty, +ch);   // big outer blocks: smooth L layers; the middle block: tile steps
   } else if (ch === 'm') {                            // flat base slab under the outer tier flights
     if (!stampTierBlock(px, py, tx, ty)) drawSemiWall(px, py, tx, ty, true);               // exactly the semi-wall's colour + texture, so wall and base read as one piece
+  } else if (ch === 'y') {                            // zone 3: the concrete landing at the top of the lawn steps
+    drawLanding(px, py, tx, ty);
   } else if (ch === 'q') {                            // hedge semi-wall
     drawSemiWall(px, py, tx, ty);
-  } else if (ch === 'S' && (zoneId === 'zone1' || zoneId === 'zone3')) {      // zones 1 and 3: the railed stair flights
+  } else if ((ch === 'S' && (zoneId === 'zone1' || zoneId === 'zone3')) || ch === 'u') {      // zones 1 and 3: the railed stair flights ('u' = the plain flight up to zone 3's lawn)
     drawFlight(px, py, tx, ty);
   } else if (ch === 'S') {                            // stairs: horizontal steps
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -1230,7 +1365,7 @@ export function render(game, time) {
   for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) if (getTile(tx, ty) === 'T') drawCrown(ctx, tx * TILE + 16, ty * TILE + 15, tx, ty, 19);   // the sitting-area trees: crowns drawn over their planters
   if (zoneId === 'zone2') drawPool(ctx, time);       // the Robotics Lab test pool: water, robots, ripples
   if (zoneId === 'zone1') drawEscalatorNose(x0, x1, y0, y1, time);
-  if (zoneId === 'zone1') drawBasementBlock(camera);   // storage-room stairwell (k / z tiles)   // the escalator well + rounded end of the escalator railing
+  drawBasementBlocks(camera);   // storage-room stairwell (k / z tiles): zone 1 and zone 3   // the escalator well + rounded end of the escalator railing
   drawFoliage(x0, x1, y0, y1);                       // leaves poking through / over the hedge rails
   drawGlassTops(ctx, time, camera, VW, VH);          // glass skylight + the students seen through it (after tiles, before characters)
 
@@ -1246,6 +1381,7 @@ export function render(game, time) {
   const ents = [];                                    // (zone 2 adds the pool signboard and the two operators here)
   if (npc.zone === zoneId) ents.push({ y: npc.footY, draw: () => drawNPC(npc, player) });
   if (zoneId === 'zone2') ents.push(...poolEntities(ctx, time));
+  if (zoneId === 'zone3') ents.push(...lawnRailEntities(x0, x1, y0, y1), ...fenceEntities(camera));   // the white lawn rail (drawn over a player standing north of it)
   ents.push({ y: player.y + player.h, draw: () => drawPlayer(player) });
   ents.sort((a, b) => a.y - b.y);                     // stable: on a tie the player is drawn last
   for (const e of ents) e.draw();

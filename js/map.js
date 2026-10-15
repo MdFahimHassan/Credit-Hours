@@ -17,6 +17,8 @@ export let npcSpawn = { x: 2, y: 2 };
 export let items = [];                       // [{x, y, collected}] in tile coordinates
 export let holes = [];                       // capsule-shaped openings in the floor, in PIXELS: [{x, y, w, h}] - from the zone's `holes` (tile units), see hole.js
 export let curvedRails = [];                 // curved west-edge rails in PIXELS: [{y0, y1, depth, r}] - from the zone's `curvedRails` (tile units), see curverail.js
+let lawnBoxCache = null;
+export let fences = [];                      // white fences in PIXELS: [{ pts: [[x, y], ...] }] - from the zone's `fences` (tile units), see renderer.js drawFence
 export let thinWalls = [];                   // solid pixel rectangles thinner than a tile (the stair handrails) - see buildThinWalls()
 const itemCache = {};                        // keeps the ID card "collected" when you leave and come back
 
@@ -46,6 +48,8 @@ export function loadZone(id) {
   items = itemCache[id];
   holes = (zone.holes ?? []).map((h) => ({ x: h.x * TILE, y: h.y * TILE, w: h.w * TILE, h: h.h * TILE, r: h.r === undefined ? undefined : h.r * TILE }));
   curvedRails = (zone.curvedRails ?? []).map((d) => curvedRailPx(d, TILE));
+  fences = (zone.fences ?? []).map((f) => ({ pts: f.points.map(([x, y]) => [x * TILE, y * TILE]) }));
+  lawnBoxCache = null;
   buildThinWalls();
 }
 loadZone('zone1');                           // the game starts in zone 1
@@ -96,6 +100,18 @@ export const POOL_PROPS = {
   operators: [{ tx: 14, ty: 9, facing: 'down' }, { tx: 25, ty: 14, facing: 'left' }],
 };
 
+
+// The outline of a zone's lawn (zone 3): the bounding box of its grass tiles ('g'), one tile further out = the border wall. null where there is no lawn.
+// (renderer.js draws the white rail along it, buildThinWalls() uses it for the rail posts at the entrance.)
+export function lawnBox() {
+  if (lawnBoxCache !== null) return lawnBoxCache || null;
+  let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (grid[y][x] === 'g') { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  lawnBoxCache = x1 >= 0 ? { x0: x0 - 1, y0: y0 - 1, x1: x1 + 1, y1: y1 + 1 } : false;
+  return lawnBoxCache || null;
+}
+export const RAIL_UP = 15;   // how far (px) the white lawn rail stands up the screen from the wall (renderer.js drawLawnRail)
+
 // Thin solid walls: the silver handrail down the middle of each zone 1 stair flight is a rail, not floor, so it blocks the
 // player. It is drawn by renderer.js drawFlight() at x = tile edge - 2 (4px wide, with a 6px post at each end of the flight);
 // these rectangles must match that drawing. A flight lane is 32px wide, so the 20px player still fits either side of it.
@@ -103,11 +119,26 @@ function buildThinWalls() {
   thinWalls = [];
   for (const h of holes) thinWalls.push(...holeBands(h));          // every hole is solid, following its curve exactly (hole.js)
   for (const c of curvedRails) thinWalls.push(...railBands(c));    // so is everything outside a curved rail (curverail.js)
+  const L = lawnBox();                                              // the white rail round the lawn: where it stops (the entrance), the end post stands up in front of the open floor - solid too
+  if (L) for (const x of [L.x0, L.x1]) for (let y = L.y0 + 1; y <= L.y1; y++)
+    if (grid[y][x] === 'q' && grid[y - 1][x] !== 'q') thinWalls.push({ x: x * TILE + 14, y: y * TILE - RAIL_UP, w: 4, h: RAIL_UP });
   if (zoneId === 'zone2') {                                         // the Robotics Lab test pool: the signboard and the two operators block the player (see pool.js)
     const { sign, operators } = POOL_PROPS;
     thinWalls.push({ x: sign.tx * TILE - 2, y: sign.ty * TILE + 15, w: TILE + 4, h: 14 });   // the board is wide and low: it blocks the width of its tile
     for (const o of operators) thinWalls.push({ x: o.tx * TILE + 4, y: o.ty * TILE + 4, w: TILE - 8, h: TILE - 6 });
     return;
+  }
+  for (const f of fences) for (let i = 1; i < f.pts.length; i++) {  // fences: every straight piece is a thin solid wall along its foot line
+    const [xa, ya] = f.pts[i - 1], [xb, yb] = f.pts[i];
+    if (xa === xb) thinWalls.push({ x: xa - 2, y: Math.min(ya, yb) - 2, w: 4, h: Math.abs(yb - ya) + 4 });
+    else thinWalls.push({ x: Math.min(xa, xb) - 2, y: ya - 2, w: Math.abs(xb - xa) + 4, h: 4 });
+  }
+  if (zoneId === 'zone3') for (let ty = 0; ty < rows; ty++) for (let tx = 0; tx < cols - 1; tx++) {   // the small handrail down the east side of the lawn steps ('u' beside the border wall): see drawFlight()
+    if (grid[ty][tx] !== 'u' || grid[ty][tx + 1] !== 'q') continue;
+    const x = tx * TILE + TILE - 8, y = ty * TILE;
+    thinWalls.push({ x, y, w: 4, h: TILE });
+    if (grid[ty - 1][tx] !== 'u') thinWalls.push({ x: x - 1, y, w: 6, h: 4 });
+    if (grid[ty + 1][tx] !== 'u') thinWalls.push({ x: x - 1, y: y + TILE - 5, w: 6, h: 5 });
   }
   if (zoneId !== 'zone1') return;                                   // only zone 1 draws S tiles as railed flights
   for (let ty = 0; ty < rows; ty++) for (let tx = 1; tx < cols; tx++) {
@@ -159,7 +190,7 @@ export function nearRestroom(cx, cy, facing) {
 }
 
 // Is this tile one of the stair flights the player can walk on (zone 1's railed flights)?
-export const isStairs = (tx, ty) => zoneId === 'zone1' && getTile(tx, ty) === 'S';
+export const isStairs = (tx, ty) => (zoneId === 'zone1' && getTile(tx, ty) === 'S') || (zoneId === 'zone3' && getTile(tx, ty) === 'u');   // zone 3: 'u' = the flight up to the lawn
 // Nearest bench tile ('C') close enough to sit on, or null. `facing` = the open side of the bench, i.e. the way a
 // person sits (looking away from the planter, towards the side the player walked up from).
 export function findSeat(cx, cy) {

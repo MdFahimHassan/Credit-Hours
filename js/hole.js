@@ -45,11 +45,22 @@ const perimeter = (w, h, r) => 4 * (w / 2 - r) + 4 * (h / 2 - r) + 2 * PI * r;  
 export const holeInner = (o) => capsule(o.x + RIM, o.y + RIM, o.w - 2 * RIM, o.h - 2 * RIM, Math.max(0, holeR(o) - RIM));
 
 // Solid thin rectangles that follow the OUTER edge of the capsule (the foot of the fence), 2px bands: the player stops right at the kerb.
+// The fence is drawn in an oblique view: its bars and top cap stand UP the screen from the foot (RAIL_H px, see drawHoleRail), so standing just north of
+// the hole would put the shoes on the grills. The solid area is therefore the capsule PLUS everything it sweeps when it is moved up by SOLID_UP px
+// (= the fence height, the thickness of the top cap and the ~5px the shoes stick out below the hitbox): the player stops in front of the top cap.
+// (Moving a shape up never changes its south edge, and the east / west edges only move where the curve does, so nothing else changes.)
+export const SOLID_UP = RAIL_H + 7;
 export function holeBands(o, step = 2) {
   const out = [], r = holeR(o), ex = o.w / 2 - r, ey = o.h / 2 - r, cx = o.x + o.w / 2, cy = o.y + o.h / 2;
-  for (let yy = o.y; yy < o.y + o.h; yy += step) {
-    const my = yy + step / 2, dy = Math.max(0, Math.abs(my - cy) - ey);
-    const half = ex + Math.sqrt(Math.max(0, r * r - dy * dy));
+  const halfAt = (yy) => {                                         // half width of the capsule at height yy (0 outside it)
+    if (yy < o.y || yy >= o.y + o.h) return 0;
+    const dy = Math.max(0, Math.abs(yy - cy) - ey);
+    return ex + Math.sqrt(Math.max(0, r * r - dy * dy));
+  };
+  for (let yy = o.y - SOLID_UP; yy < o.y + o.h; yy += step) {
+    const my = yy + step / 2;
+    let half = 0;
+    for (let u = 0; u <= SOLID_UP; u += 1) half = Math.max(half, halfAt(my + u));   // the capsule as seen from this row, after sliding it up by 0..SOLID_UP px
     if (half > 0.5) out.push({ x: cx - half, y: yy, w: 2 * half, h: step + 0.01 });
   }
   return out;

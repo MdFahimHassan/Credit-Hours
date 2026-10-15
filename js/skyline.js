@@ -62,6 +62,7 @@ const WINDOW_FILL = { zone1: { e: [[8, 21]] }, zone2: { w: [[8, 21]] } };   // z
 // CURVED RAILS (curverail.js, `curvedRails` in zones.js): the west rail steps in towards the floor for a stretch and back out in smooth bends (zone 3, beside the hole).
 //   The window along the edge stays ONE straight picture (the x0 rail tiles are all rails). Where the rail has stepped in, the picture simply carries on to the
 //   left of it: the picture has `depth` px of near ground on the wrong side of its edge line (paintPano dneg), and drawCurvedBays() paints it into the area outside the curve.
+const BAY_NEAR = 96;   // px of near ground (the street at d 46-58 + the roofs round it) that is repeated to fill a deep bay (see paintPano)
 const bayDepthPx = (side) => side === 'w' ? Math.max(0, ...curvedRails.map((c) => c.depth)) : 0;
 const WALL_STYLE = { zone1: { n: 'terrace' } };
 const wallStyle = (zid, side) => WALL_STYLE[zid]?.[side] ?? 'concrete';
@@ -636,11 +637,19 @@ function paintPano(side, len, rnd, grainSeed, dneg = 0, zid = '') {
     roofsPass(g, rnd, 0, spanO, 34, 72, hz);
     roofsPass(g, rnd, 0, spanO, 4, 40, hz);
   }
-  if (dneg) {                                                     // the near side of the edge line: the first `dneg` px of the picture mirrored (and slid along the edge so the mirror does not show), so the street and roofs simply go on
-    const tmp = mkCanvas(len, dneg); tmp.getContext('2d').drawImage(c, 0, dneg, len, dneg, 0, 0, len, dneg);
-    const slide = Math.round(len * 0.37);
-    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.translate(0, dneg); g.scale(1, -1);
-    g.drawImage(tmp, slide, 0); g.drawImage(tmp, slide - len, 0);
+  if (dneg) {                                                     // the near side of the edge line: the first `near` px of the picture mirrored (and slid along the edge so the mirror does not show), so the street and roofs simply go on
+    // a bay (curved rail, see CURVED RAILS) can be deeper than the near ground (street + roofs) is: then that strip is mirrored again and again (BAY_NEAR px each time),
+    // so the bay is filled with more street and roofs instead of the far city seen upside down
+    const near = bayDepthPx(side) > 0 ? Math.min(dneg, BAY_NEAR) : dneg;
+    const tmp = mkCanvas(len, near); tmp.getContext('2d').drawImage(c, 0, dneg, len, near, 0, 0, len, near);
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+    for (let k = 0; k * near < dneg; k++) {                       // strip k covers d from -(k + 1) * near to -k * near: flipped when k is even, as drawn when odd (so every seam is a mirror line)
+      const slide = Math.round(len * 0.37 * (k + 1)) % len;
+      g.save();
+      if (k % 2 === 0) { g.translate(0, dneg - k * near); g.scale(1, -1); } else g.translate(0, dneg - (k + 1) * near);
+      g.drawImage(tmp, slide, 0); g.drawImage(tmp, slide - len, 0);
+      g.restore();
+    }
     g.restore();
   }
   const shade = g.createLinearGradient(0, 0, 0, 44);              // the building's own shadow along the foot

@@ -28,6 +28,11 @@
 //   H  dense hedge (SOLID - a bush you can NOT walk through; used for the hedge lanes in zone 1)
 // New in zone 3:
 //   g  grass (walkable lawn)   K  storage room block (solid)   S on the bottom row = stairs down to zone 1
+//   u  plain 2-wide flight of steps (walkable, slows you like stairs): zone 3's way up to the lawn (x14-15, rows 11-13 = 6 steps)
+//   (zone 3) hedge bed (H/Y/Z, with the usual guard rail): an L round the west side of the landing and the storage room - x7-13 rows 8-10, then x7-10 down to row 15, right against the storage room
+//   y  concrete landing at the top of those steps (walkable, the colour of the treads): x14-16, rows 8-10 - the 3-tile opening in the lawn's west border
+//   k  (zone 3 too) the storage room block, x11-13 rows 11-15 (the 3x3 front at rows 13-15 + 2 rows of roof behind it), drawn mirrored so its louvered wall faces the stairs (renderer.js BLOCKS)
+//   The white rail round the lawn is drawn automatically on the lawn's border wall (q) - renderer.js drawLawnRail()
 // New in zone 2:
 //   B  pool rim (solid)    ~  water (solid)        M  men's restroom door (solid)   G  women's restroom door (solid)
 //      Each restroom is a PAIR of tiles: the left tile is the slatted steel gate, the right tile is the doorway (drawRestroomDoor in renderer.js).
@@ -186,19 +191,19 @@ export const ZONES = {
       "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
       "R...................................................................R",
       "R...................................................................R",
-      "R...................................................................R",
-      "R...................................................................R",
-      "R...................................................................R",
-      "R...................................................................R",
-      "R...................................................................R",
-      "R.CCC...............................................................R",
-      "R.CTC...............................................................R",
-      "R.CTC...............................................................R",
-      "R.CCC...........qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq..........R",
-      "R.CTC...........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R.CTC...........qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R.CCC...........qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq..........R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R......HHYHHYHyyyggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R.CCC..HYHHZHHyyyggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R.CTC..YHHYHHYyyyggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R.CTC..HYHHkkkuuqggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R.CCC..YHHYkkkuuqggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R.CTC..HHZHkkkuuqggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R.CTC..HYHHkkk..qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R.CCC..YHHYkkk..qggggggggggggggggggggggggggggggggggggggggq..........R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
@@ -223,13 +228,16 @@ export const ZONES = {
       '0,27': { to: 'zone2', spawn: { x: 29, y: 2 }, facing: 'left', label: 'West path (lower)' },
     },
     // capsule-shaped holes you can look down through, ringed by a balustrade (hole.js). Tile units: x, y, w, h of the OUTER edge.
-    // This one sits opposite the curtained doors: 4 wide x 8 tall (x6-9, rows 18-25), 2 tiles of path in front of it (rows 26-27) and 1 tile on its right (x10).
+    // This one is 4 wide x 8 tall (x11-14, rows 18-25), 2 tiles of path in front of it (rows 26-27) and 1 tile between it and the lawn's west border (x15, border at x16).
     // r = corner radius in tiles (leave it out for the full capsule, r: 2 here).
-    holes: [{ x: 6, y: 18, w: 4, h: 8, r: 1 }],
-    // curved rails (curverail.js): the west rail steps in 3 tiles beside the hole (straight at x3, rows 19-24) like the hole's own balustrade: straight runs with rounded
+    holes: [{ x: 11, y: 18, w: 4, h: 8, r: 1 }],
+    // curved rails (curverail.js): the west rail steps in 8 tiles beside the hole (straight at x8, rows 19-24, 2 tiles of floor between it and the hole) like the hole's own balustrade: straight runs with rounded
     // corners (r: 1 tile) only at the turns - across on rows 17 and 25, where the old walls were. The lower return runs straight into the rail of the path to zone 2.
     // The skyline stays one straight picture to the left of it. The x0 tiles of rows 17-25 are 'R' (solid) but are not drawn: the curve is.
-    curvedRails: [{ y0: 17, y1: 26, depth: 3, r: 1 }],
+    curvedRails: [{ y0: 17, y1: 26, depth: 8, r: 1 }],
+    // white fences (map.js fences, drawn by renderer.js drawFence, solid): chains of points in tile units (x, y of the FOOT of the fence). This one closes the open sides of the
+    // landing at the top of the lawn steps (x14-16, rows 8-10) - the west side (x14.06, rows 8-11) and the north side (row 8, to the lawn rail's end post at x16.5) - so nobody walks off it.
+    fences: [{ points: [[14.0625, 11], [14.0625, 8], [16.5, 8]] }],
   },
 };
 
