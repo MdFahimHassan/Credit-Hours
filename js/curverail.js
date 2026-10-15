@@ -7,6 +7,8 @@
 //   r      radius of the four rounded corners (tiles) - like the hole's balustrade: straight runs with proper curves only at the turns
 //   y1     the first row of the open path the rail leads into: the rail turns west and runs STRAIGHT into the path's own rail (skyline.js paintExit), whose
 //          outer face is 24px (RAIL_W) above y1, so the two rails are one piece
+//   closed  (optional, true) a bay with no path at its end: the rail turns west and then SOUTH again in a rounded corner (like the bend at the top), so it ends at (0, y1) heading
+//          south and joins the straight edge rail that carries on below row y1 (instead of running straight west into an exit path's rail)
 // Rows y0..y1-1 of x 0 must be 'R' in the map: those tiles stay solid and are NOT drawn as straight rail (renderer.js drawRail skips them),
 // the curved rail (drawn by renderer.js drawCurvedRails) replaces them. Everything left of the curve is "outside": the skyline carries on there
 // (skyline.js drawCurvedBays), and it is solid for the player (railBands below follow the curve exactly).
@@ -21,7 +23,7 @@ const STEP = 0.5;                  // distance (px) between two sampled points o
 // It starts at (0, y0) heading south and ends at (0, y1 - RAIL_W) heading WEST, where the rail of the open path takes over.
 // The inward normal (towards the floor) of a point is (ty, -tx).
 export function railPath(c) {
-  const D = c.depth, R = Math.min(c.r, D / 2), y0 = c.y0, yE = c.y1 - RAIL_W;
+  const D = c.depth, R = Math.min(c.r, D / 2), y0 = c.y0, closed = !!c.closed, yE = closed ? c.y1 - R : c.y1 - RAIL_W;
   const arc = (cx, cy, a0, a1) => ({ len: Math.abs(a1 - a0) * R, at: (u) => {
     const a = a0 + (a1 - a0) * u, sg = Math.sign(a1 - a0);
     return { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a), tx: -sg * Math.sin(a), ty: sg * Math.cos(a) };
@@ -33,7 +35,10 @@ export function railPath(c) {
     arc(D - R, y0 + 2 * R, -PI / 2, 0),              // turns south
     line(D, y0 + 2 * R, D, yE - R),                  // the straight part at full depth
     arc(D - R, yE - R, 0, PI / 2),                   // turns west
-    line(D - R, yE, 0, yE),                          // and runs straight into the rail of the path
+    ...(closed
+      ? [line(D - R, yE, R, yE),                     // closed bay: runs west...
+         arc(R, yE + R, -PI / 2, -PI)]               // ...and turns south in a rounded corner (the mirror of the first bend) into the straight edge rail, which carries on from y1
+      : [line(D - R, yE, 0, yE)]),                   // and runs straight into the rail of the path
   ].filter((q) => q.len > 0.01);
   const total = parts.reduce((t, q) => t + q.len, 0), K = Math.max(2, Math.ceil(total / STEP)), pts = [];
   let pi = 0, acc = 0;
@@ -41,6 +46,18 @@ export function railPath(c) {
     const s = k * total / K;
     while (pi < parts.length - 1 && s > acc + parts[pi].len + 1e-9) { acc += parts[pi].len; pi++; }
     pts.push(parts[pi].at(Math.max(0, Math.min(1, (s - acc) / (parts[pi].len || 1)))));
+  }
+  return { pts, len: total };
+}
+
+// The rounded NORTH-WEST corner of the zone's rail (zones.js `roundedCorners: [{ corner: 'nw', r: 1 }]`): a quarter circle, centre (R, R), from (R, 0) heading WEST to (0, R) heading
+// SOUTH (the same bend as the closing bend of a `closed` bay). The north edge rail carries on east from x = R and the west edge rail south from y = R, both as ordinary tiles.
+// Same format as railPath: the inward normal of a point is (ty, -tx). In pixels.
+export function cornerPath(R) {
+  const total = PI / 2 * R, K = Math.max(2, Math.ceil(total / STEP)), pts = [];
+  for (let k = 0; k <= K; k++) {
+    const a = -PI / 2 - (PI / 2) * (k / K);
+    pts.push({ x: R + R * Math.cos(a), y: R + R * Math.sin(a), tx: Math.sin(a), ty: -Math.cos(a) });
   }
   return { pts, len: total };
 }
@@ -68,4 +85,5 @@ export function railBands(c, step = 2) {
 }
 
 // the curve of a zone in pixels (from the zone's tile-unit definition)
-export const curvedRailPx = (d, tile) => ({ y0: d.y0 * tile, y1: d.y1 * tile, depth: d.depth * tile, r: d.r * tile });
+export const roundedCornerPx = (d, tile) => ({ corner: d.corner, r: d.r * tile });
+export const curvedRailPx = (d, tile) => ({ y0: d.y0 * tile, y1: d.y1 * tile, depth: d.depth * tile, r: d.r * tile, closed: !!d.closed });

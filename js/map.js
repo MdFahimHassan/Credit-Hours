@@ -3,7 +3,7 @@
 // when loadZone() switches zones.
 import { ZONES } from './zones.js';
 import { holeBands } from './hole.js';
-import { railBands, curvedRailPx } from './curverail.js';
+import { railBands, curvedRailPx, roundedCornerPx } from './curverail.js';
 export const TILE = 32;
 
 export const UP_ROWS = 11;                  // see upperTile() below
@@ -16,6 +16,7 @@ export let spawn = { x: 1, y: 1 };
 export let npcSpawn = { x: 2, y: 2 };
 export let items = [];                       // [{x, y, collected}] in tile coordinates
 export let holes = [];                       // capsule-shaped openings in the floor, in PIXELS: [{x, y, w, h}] - from the zone's `holes` (tile units), see hole.js
+export let roundedCorners = [];               // rounded rail corners in PIXELS: [{corner: 'nw', r}] - from the zone's `roundedCorners`, see curverail.js cornerPath
 export let curvedRails = [];                 // curved west-edge rails in PIXELS: [{y0, y1, depth, r}] - from the zone's `curvedRails` (tile units), see curverail.js
 let lawnBoxCache = null;
 export let fences = [];                      // white fences in PIXELS: [{ pts: [[x, y], ...] }] - from the zone's `fences` (tile units), see renderer.js drawFence
@@ -48,6 +49,7 @@ export function loadZone(id) {
   items = itemCache[id];
   holes = (zone.holes ?? []).map((h) => ({ x: h.x * TILE, y: h.y * TILE, w: h.w * TILE, h: h.h * TILE, r: h.r === undefined ? undefined : h.r * TILE }));
   curvedRails = (zone.curvedRails ?? []).map((d) => curvedRailPx(d, TILE));
+  roundedCorners = (zone.roundedCorners ?? []).map((d) => roundedCornerPx(d, TILE));
   fences = (zone.fences ?? []).map((f) => ({ pts: f.points.map(([x, y]) => [x * TILE, y * TILE]) }));
   lawnBoxCache = null;
   buildThinWalls();
@@ -214,7 +216,8 @@ export function findSeat(cx, cy) {
 export const HEAD = 17;                                   // the head reaches ~17px above the hitbox
 export const FOOT = 5;                                    // the shoes reach ~5px below the hitbox
 const clearsPlayer = (tx, ty) => { const c = getTile(tx, ty); return c !== 'R' && isSolid(tx, ty); };   // every solid tile (walls, hedges and their rails, benches, the pool rim...) except the edge railings
-const clearsHead = (tx, ty) => clearsPlayer(tx, ty) && getTile(tx, ty) !== 'B';   // the head may overlap the FLAT pool rim / lawn border (so you can walk right up to it from the south), the shoes may not (no standing on it from the north)
+const lowBed = (tx, ty) => zoneId === 'zone3' && 'HYZC'.includes(getTile(tx, ty));   // zone 3: the hedge bed (on a LOW semi-wall, renderer.js liftedFront) and the sitting-area benches are low: a head may pass over them
+const clearsHead = (tx, ty) => clearsPlayer(tx, ty) && getTile(tx, ty) !== 'B' && !lowBed(tx, ty);   // the head may overlap the FLAT pool rim / lawn border (so you can walk right up to it from the south), the shoes may not (no standing on it from the north)
 export function headWallBottom(x, y, w) {                // lowest pixel edge of a wall tile that the strip above the hitbox overlaps, or null
   const x0 = Math.floor(x / TILE), x1 = Math.floor((x + w - 0.01) / TILE);
   const y0 = Math.floor((y - HEAD) / TILE), y1 = Math.floor((y - 0.01) / TILE);
