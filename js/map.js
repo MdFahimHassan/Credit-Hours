@@ -3,7 +3,7 @@
 // when loadZone() switches zones.
 import { ZONES } from './zones.js';
 import { holeBands } from './hole.js';
-import { stairwellBands } from './stairwell.js';
+import { stairwellBands, stairDepth } from './stairwell.js';
 import { railBands, curvedRailPx, roundedCornerPx } from './curverail.js';
 export const TILE = 32;
 
@@ -67,14 +67,14 @@ loadZone('zone1');                           // the game starts in zone 1
 // ('e' in zones.js), its upper half (row -1) lives in the upper zone, so getTile() returns it even when the upper zone is not being painted
 // (that is what lets drawGlassDoor() tell the two halves apart).
 const UP_DOOR = 'e';
-const UP_HEDGES = [25, 26, 29, 30];                         // columns of row 0..5 that hold a hedge bed which carries on upwards: the two beds beside the lane (the stair-side beds end at the stairs)
+const UP_HEDGES = [27, 28, 29, 30];                         // columns of row 0..5 that hold a hedge bed which carries on upwards: the one bed beside the lane (now x27-30; the stair-side beds end at the stairs)
 function upperTile(tx, ty) {
   const r = (-ty - 1) % 6;                                    // reuse the look of rows 0-5 so the beds do not repeat obviously
   if (tx >= 31) return '#';                                   // the north skyline window (31-37) is drawn by skyline.js
   if (tx === 0) return ty === -1 ? UP_DOOR : '#';             // the west wall (cream, see renderer.js) carries on up; row -1 holds the top half of the new glass door (see UP_DOOR)
   if (tx === 2 || tx === 21) return 'q';                      // the 1-tile semi-wall borders of the stair-side hedge beds go on to the top (the hedges themselves end at the stairs)
   if (UP_HEDGES.includes(tx)) return grid[r][tx];
-  if (tx === 1 || (tx >= 22 && tx <= 24) || tx === 27 || tx === 28) return '.';   // normal stone paving: the up-path (x1), behind the storage room, the lane
+  if (tx === 1 || (tx >= 22 && tx <= 26)) return '.';   // normal stone paving: the up-path (x1), behind the storage room, the lane
   return 'g';                                                 // everything else: lawn (the hedges beside the stairs end at the stairs)
 }
 
@@ -89,6 +89,7 @@ const SOLID_TILES = '#RLlAfdDvEFB~MGKCTWHYZJQaoc12345678qmkejw';   // H = hedge,
 export const isSolid = (tx, ty) => { const c = getTile(tx, ty); return c === '~' ? !swim.on : SOLID_TILES.includes(c); };
 
 // Exit info for a tile of the current zone (or null)
+export const stairwellDepth = (cx, cy) => { for (const s of stairwells) { const t = stairDepth(s, cx, cy); if (t >= 0) return t; } return -1; };   // -1 = not on the big stairs down, else 0..1 how far down (stairwell.js)
 export const getExit = (tx, ty) => ZONES[zoneId].exits?.[tx + ',' + ty] ?? null;
 
 export function getExitHint(tx, ty) {
@@ -140,11 +141,12 @@ function buildThinWalls() {
     else thinWalls.push({ x: Math.min(xa, xb) - 2, y: ya - 2, w: Math.abs(xb - xa) + 4, h: 4 });
   }
   if (zoneId === 'zone3') for (let ty = 0; ty < rows; ty++) for (let tx = 0; tx < cols - 1; tx++) {   // the small handrail down the east side of the lawn steps ('u' beside the border wall): see drawFlight()
-    if (grid[ty][tx] !== 'u' || grid[ty][tx + 1] !== 'q') continue;
+    const c = grid[ty][tx];                                         // 'u' = the flight south of the landing, 'n' = the flipped one north of it
+    if ((c !== 'u' && c !== 'n') || grid[ty][tx + 1] !== 'q') continue;
     const x = tx * TILE + TILE - 8, y = ty * TILE;
     thinWalls.push({ x, y, w: 4, h: TILE });
-    if (grid[ty - 1][tx] !== 'u') thinWalls.push({ x: x - 1, y, w: 6, h: 4 });
-    if (grid[ty + 1][tx] !== 'u') thinWalls.push({ x: x - 1, y: y + TILE - 5, w: 6, h: 5 });
+    if (grid[ty - 1][tx] !== c) thinWalls.push({ x: x - 1, y, w: 6, h: 4 });
+    if (grid[ty + 1][tx] !== c) thinWalls.push({ x: x - 1, y: y + TILE - 5, w: 6, h: 5 });
   }
   if (zoneId !== 'zone1') return;                                   // only zone 1 draws S tiles as railed flights
   for (let ty = 0; ty < rows; ty++) for (let tx = 1; tx < cols; tx++) {
@@ -196,7 +198,7 @@ export function nearRestroom(cx, cy, facing) {
 }
 
 // Is this tile one of the stair flights the player can walk on (zone 1's railed flights)?
-export const isStairs = (tx, ty) => (zoneId === 'zone1' && getTile(tx, ty) === 'S') || (zoneId === 'zone3' && getTile(tx, ty) === 'u');   // zone 3: 'u' = the flight up to the lawn
+export const isStairs = (tx, ty) => (zoneId === 'zone1' && getTile(tx, ty) === 'S') || (zoneId === 'zone3' && (getTile(tx, ty) === 'u' || getTile(tx, ty) === 'n'));   // zone 3: 'u' / 'n' = the flights up to the lawn landing (n = the flipped one on the north side)
 // Nearest bench tile ('C') close enough to sit on, or null. `facing` = the open side of the bench, i.e. the way a
 // person sits (looking away from the planter, towards the side the player walked up from).
 export function findSeat(cx, cy) {

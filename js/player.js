@@ -1,10 +1,11 @@
 // player.js - position, movement, and X/Y-separated collision.
-import { TILE, HEAD, FOOT, boxHitsSolid, solidRectsAt, isStairs, headWallBottom, footWallTop } from './map.js';
+import { TILE, HEAD, FOOT, boxHitsSolid, solidRectsAt, isStairs, stairwellDepth, headWallBottom, footWallTop } from './map.js';
 import { input } from './input.js';
 
 const STAIR_SPEED = 0.85;   // walking speed on the stairs (1 = same as flat ground)
 const STAIR_BOB = 2;       // how many px the body lifts on each step
 const SWIM_SPEED = 0.6;    // swimming speed in the pool (1 = same as flat ground)
+const DESCENT_PX = 13;      // how many px he has sunk by the time he reaches the dark end of the big stairs down
 const STEP_PX = 16;        // one stair step = 16px (two per tile)
 
 export class Player {
@@ -24,6 +25,8 @@ export class Player {
     this.climbFront = false;                 // climbing while facing the camera (the south ladder) instead of with his back to it
     this.climbFrame = 0;                     // which of the 6 climb frames to draw (set by pool.js ladder)
     this.onStairs = false;                   // true while the feet are on a stair flight (slower, and the sprite bobs with each step)
+    this.descent = 0;                        // 0..1: how far down the big stairs (zone 3) he is: he sinks, dims and dips on every step (stairBob / renderer drawPlayer)
+    this.stairDir = 1;                       // 1 = walking down (west), -1 = coming back up (east)
     this.stepDist = 0;                       // pixels walked on stairs (drives the step bob: one bob per 16px = one stair step)
   }
   // Sit on a bench tile found by findSeat(): the sprite's sitting pose is drawn by sprites.js
@@ -52,7 +55,10 @@ export class Player {
     else if (dy < 0) this.facing = 'up'; else if (dy > 0) this.facing = 'down';
 
     // Walking on a stair flight is a little slower than on the flat (so the steps are felt, but not a lot)
-    this.onStairs = isStairs(Math.floor(this.cx / TILE), Math.floor((this.y + this.h - 2) / TILE));
+    const sd = stairwellDepth(this.cx, this.cy);                         // the big stairs down (stairwell.js): -1 = not on them
+    this.descent = sd < 0 ? 0 : sd;
+    if (sd >= 0 && dx) this.stairDir = dx < 0 ? 1 : -1;
+    this.onStairs = sd >= 0 || isStairs(Math.floor(this.cx / TILE), Math.floor((this.y + this.h - 2) / TILE));
     const speed = this.swimming ? this.speed * SWIM_SPEED : this.onStairs ? this.speed * STAIR_SPEED : this.speed;
 
     // --- X axis first: move, then undo overlap ---
@@ -94,8 +100,10 @@ export class Player {
   // How far (px, negative = up) the sprite is lifted right now: on a stair flight each step lifts the body a touch and lets it
   // settle again, once per 16px walked (= the height of one stair step as drawn by renderer.js drawFlight).
   get stairBob() {
-    if (!this.onStairs || !this.moving) return 0;
+    const sink = Math.round(this.descent * DESCENT_PX);             // the big stairs down: he is lower the further down he is
+    if (!this.onStairs || !this.moving) return sink;
     const k = (this.stepDist % STEP_PX) / STEP_PX;                 // 0..1 through the current step
+    if (this.descent > 0) return sink + Math.round(Math.sin(k * Math.PI) * STAIR_BOB) * this.stairDir;   // going down each step DROPS the body (going up lifts it)
     return -Math.round(Math.sin(k * Math.PI) * STAIR_BOB);
   }
 }

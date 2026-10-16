@@ -19,6 +19,21 @@ const LIT_STEPS = 5;           // fully lit for this many steps (the near part o
 const BLACK_STEPS = 3;         // ... and the last steps are completely black
 const BARRIER_STEPS = 12;      // the barrier across the stairs stands this many steps in (they are nearly black by then)
 const PI = Math.PI;
+const VOID_DARK = 0.80;        // how dark the lower floor is seen from up here (0 = fully lit, 1 = pure black): "barely visible", not black
+const FLOOR_TILE = 13;         // lower-floor tile size in px (same as the holes in glass.js)
+
+// the lower floor seen at the bottom of the stairs and beside them: the same grey checker + joints as the floor under the holes (glass.js)
+let floorPat = null;
+function lowerFloor(ctx) {
+  if (floorPat) return floorPat;
+  const T = FLOOR_TILE, c = document.createElement('canvas'); c.width = c.height = T * 2;
+  const g = c.getContext('2d');
+  g.fillStyle = '#5d6469'; g.fillRect(0, 0, T * 2, T * 2);
+  g.fillStyle = 'rgba(255,255,255,0.05)'; g.fillRect(0, 0, T, T); g.fillRect(T, T, T, T);
+  g.fillStyle = 'rgba(0,0,0,0.28)';
+  g.fillRect(0, 0, T * 2, 1); g.fillRect(0, T, T * 2, 1); g.fillRect(0, 0, 1, T * 2); g.fillRect(T, 0, 1, T * 2);
+  return (floorPat = ctx.createPattern(c, 'repeat'));
+}
 
 const radius = (o) => Math.max(1, Math.min(o.r ?? 32, o.h / 2, o.w / 2));
 const geo = (o) => {
@@ -26,6 +41,13 @@ const geo = (o) => {
   return { xe: o.x + o.w, y0: mid - sw / 2, y1: mid + sw / 2, mid, len, steps: Math.round(len / STEP) };
 };
 export const darkX = (o) => geo(o).xe - BARRIER_STEPS * STEP;   // west of this (across the stairs) the player is stopped
+// How far down the stairs a point is: -1 = not on the flight, else 0 (level with the floor, at the open end) .. 1 (at the barrier in the dark).
+// player.js / renderer.js use it to make him sink, dim and dip with every step.
+export function stairDepth(o, cx, cy) {
+  const { xe, y0, y1, len } = geo(o);
+  if (cy < y0 - 1 || cy > y1 + 1 || cx > xe || cx < xe - len) return -1;
+  return Math.max(0, Math.min(1, (xe - cx) / (BARRIER_STEPS * STEP)));
+}
 
 // the outline of the rails at inset d (px) from the outer edge, `up` px higher up the screen: an OPEN path that starts at the south end of the north rail's east piece (the side of
 // the stairs), runs north, turns west along the north side, round the west end, east along the south side, and turns north up the east piece to the other side of the stairs
@@ -90,7 +112,8 @@ export function drawStairwellInterior(ctx, o, time) {
   const { xe, y0, y1, mid, len, steps } = geo(o), inner = innerPath(o), LANE_H = y1 - y0, xs = xe - len;
   ctx.save();
   ctx.clip(inner);
-  ctx.fillStyle = '#0a0d10'; ctx.fillRect(o.x, o.y, o.w + 8, o.h);                         // the void beside the stairs
+  ctx.fillStyle = lowerFloor(ctx); ctx.fillRect(o.x, o.y, o.w + 8, o.h);                    // the lower floor beside / below the stairs (the same floor as under the holes) ...
+  ctx.fillStyle = `rgba(6,8,12,${VOID_DARK})`; ctx.fillRect(o.x, o.y, o.w + 8, o.h);          // ... deep in the shade, so it is only barely visible
   // the north wall of the shaft: grey vertical louvre fins, as in the holes (dark here: the lower floor does not exist yet)
   const FIN_H = 17;
   ctx.fillStyle = '#3a4248'; ctx.fillRect(o.x, o.y, o.w, RIM + FIN_H);
@@ -99,31 +122,31 @@ export function drawStairwellInterior(ctx, o, time) {
   sh.addColorStop(0, 'rgba(0,0,0,0.6)'); sh.addColorStop(1, 'rgba(0,0,0,0.75)');
   ctx.fillStyle = sh; ctx.fillRect(o.x, o.y, o.w, RIM + FIN_H + 2);
   // the two flights (going down WEST): tread i is 16px wide; each one a little further down, so a little darker
-  for (let i = 0; i < steps; i++) {
+  for (let i = 0; i < steps - BLACK_STEPS; i++) {         // (the last steps are the lower floor, not treads)
     const xr = xe - i * STEP, xl = xr - STEP;
     ctx.fillStyle = i % 2 ? '#c0beb5' : '#cac8bf'; ctx.fillRect(xl, y0, STEP, LANE_H);
     ctx.fillStyle = '#d8d6cd'; ctx.fillRect(xl, y0, 2, LANE_H);                     // the lit nosing at the west edge of the tread
     ctx.fillStyle = 'rgba(40,40,46,0.34)'; ctx.fillRect(xr - 4, y0, 4, LANE_H);     // shadow of the step above, on this tread
   }
-  for (let yy = y0 + 32; yy < y1; yy += 32) { ctx.fillStyle = 'rgba(0,0,0,0.06)'; ctx.fillRect(xs, yy, len, 1); }   // faint slab joints along the treads
+  const xt = xs + BLACK_STEPS * STEP;                                                 // where the treads end (west of it is the lower floor: no joints, no handrail)
+  for (let yy = y0 + 32; yy < y1; yy += 32) { ctx.fillStyle = 'rgba(0,0,0,0.06)'; ctx.fillRect(xt, yy, len - BLACK_STEPS * STEP, 1); }   // faint slab joints along the treads
   // the concrete side walls of the stairs (a low parapet with a pale top, as in the photos)
-  ctx.fillStyle = '#8f8d86'; ctx.fillRect(xs, y0 - 5, len, 5); ctx.fillRect(xs, y1, len, 5);
-  ctx.fillStyle = '#b4b2aa'; ctx.fillRect(xs, y0 - 5, len, 2); ctx.fillRect(xs, y1, len, 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.30)'; ctx.fillRect(xs, y0, len, 3); ctx.fillRect(xs, y1 - 3, len, 3);
+  ctx.fillStyle = '#8f8d86'; ctx.fillRect(xs + BLACK_STEPS * STEP, y0 - 5, len - BLACK_STEPS * STEP, 5); ctx.fillRect(xs + BLACK_STEPS * STEP, y1, len - BLACK_STEPS * STEP, 5);
+  ctx.fillStyle = '#b4b2aa'; ctx.fillRect(xs + BLACK_STEPS * STEP, y0 - 5, len - BLACK_STEPS * STEP, 2); ctx.fillRect(xs + BLACK_STEPS * STEP, y1, len - BLACK_STEPS * STEP, 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.30)'; ctx.fillRect(xs + BLACK_STEPS * STEP, y0, len - BLACK_STEPS * STEP, 3); ctx.fillRect(xs + BLACK_STEPS * STEP, y1 - 3, len - BLACK_STEPS * STEP, 3);
   // the single pipe handrail between the two flights: round tube on posts
   const ry = mid - 9;
-  ctx.fillStyle = 'rgba(0,0,0,0.30)'; ctx.fillRect(xs, mid + 1, len - 2, 2);
-  for (let px = xe - 6; px > xs; px -= 32) { ctx.fillStyle = '#9ea1a6'; ctx.fillRect(px - 1, ry, 3, 10); ctx.fillStyle = '#dcdde0'; ctx.fillRect(px - 1, ry, 1, 10); ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(px - 1, mid, 3, 2); }
-  ctx.fillStyle = '#7b7d82'; ctx.fillRect(xs, ry + 2, len - 2, 1);
-  ctx.fillStyle = '#c9cacd'; ctx.fillRect(xs, ry, len - 2, 2);
-  ctx.fillStyle = '#f2f2f4'; ctx.fillRect(xs, ry - 1, len - 2, 1);
-  ctx.fillStyle = '#a7a9ae'; ctx.fillRect(xe - 8, mid - 14, 4, 16); ctx.fillStyle = '#e6e7ea'; ctx.fillRect(xe - 8, mid - 14, 2, 16); ctx.fillStyle = '#fafafb'; ctx.fillRect(xe - 8, mid - 15, 4, 2);   // taller end post
+  ctx.fillStyle = 'rgba(0,0,0,0.30)'; ctx.fillRect(xt, mid + 1, xe - 2 - xt, 2);
+  for (let px = xe - 6; px > xt; px -= 32) { ctx.fillStyle = '#9ea1a6'; ctx.fillRect(px - 1, ry, 3, 10); ctx.fillStyle = '#dcdde0'; ctx.fillRect(px - 1, ry, 1, 10); ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(px - 1, mid, 3, 2); }
+  ctx.fillStyle = '#7b7d82'; ctx.fillRect(xt, ry + 2, xe - 2 - xt, 1);
+  ctx.fillStyle = '#c9cacd'; ctx.fillRect(xt, ry, xe - 2 - xt, 2);
+  ctx.fillStyle = '#f2f2f4'; ctx.fillRect(xt, ry - 1, xe - 2 - xt, 1);
 
   // the dark: the steps fade into black
   const gx0 = xe - LIT_STEPS * STEP, gx1 = xs + BLACK_STEPS * STEP;
   const g = ctx.createLinearGradient(gx0, 0, gx1, 0);
-  g.addColorStop(0, 'rgba(6,8,12,0)'); g.addColorStop(0.45, 'rgba(6,8,12,0.55)'); g.addColorStop(1, 'rgba(3,4,6,1)');
-  ctx.fillStyle = g; ctx.fillRect(xs, y0 - 6, len, LANE_H + 12);
+  g.addColorStop(0, 'rgba(6,8,12,0)'); g.addColorStop(0.45, 'rgba(6,8,12,0.5)'); g.addColorStop(1, `rgba(6,8,12,${VOID_DARK})`);
+  ctx.fillStyle = g; ctx.fillRect(xs + BLACK_STEPS * STEP, y0 - 6, len - BLACK_STEPS * STEP, LANE_H + 12);
 
   // soft dark rim: the walls swallow the light near the edge
   ctx.lineJoin = 'round';
@@ -179,12 +202,5 @@ export function drawStairwellRail(ctx, o) {
 
   ctx.save(); ctx.beginPath(); ctx.rect(o.x - 20, o.y - 30, o.w + 40, mid - o.y + 30); ctx.clip(); handrail(); ctx.restore();   // in front of the bars on the far (north) half
 
-  // a stout pale post at each end of the rail, at the sides of the stairs
-  const E = xe - RD;
-  for (const y of [y0, y1]) {
-    ctx.fillStyle = 'rgba(25,25,32,0.30)'; ctx.fillRect(E - 4, y - 1, 9, 3);
-    ctx.fillStyle = '#d3d3d7'; ctx.fillRect(E - 3, y - H - 1, 6, H + 1);
-    ctx.fillStyle = '#f1f1f3'; ctx.fillRect(E - 3, y - H - 1, 2, H + 1); ctx.fillRect(E - 3, y - H - 2, 6, 2);
-  }
   ctx.restore();
 }

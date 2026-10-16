@@ -29,7 +29,7 @@ const COLORS = {
   '#': '#5b5b66', '.': '#8f8f8b', '~': '#3a7bd5', 'h': '#2e6b34', 'g': '#4caf50',   // generic
   'p': '#a9a28e',                       // path
   'R': '#b8b2a4',                       // railing (floor drawn first, bars on top)
-  'S': '#d3d1c7', 'u': '#bdbab0', 'y': '#bdbab0',       // stairs; 'u' = the 2-wide flight up to the lawn (zone 3)
+  'S': '#d3d1c7', 'u': '#bdbab0', 'n': '#bdbab0', 'y': '#bdbab0',       // stairs; 'u' = the 2-wide flight up to the lawn (zone 3)
   '1': '#8f8f8b', '2': '#8f8f8b', '3': '#8f8f8b', '4': '#8f8f8b', '5': '#8f8f8b', '6': '#8f8f8b', '7': '#8f8f8b', '8': '#8f8f8b', 'q': '#a6a49c', 'm': '#8f8f8b',   // amphitheatre tiers (and 'm' = their flat base slab): stone floor under them, slabs drawn by drawTier
   'L': '#b9573a', 'l': '#cfd2d6', 'f': '#e4e6e9', 'd': '#e4e6e9', 'A': '#cfd2d6',   // elevator wall (drawn by drawLiftWall)
   'D': '#9c6428',                       // store room door
@@ -106,7 +106,7 @@ function paintPlantedTile(g, ch, px, py, tx, ty) {
     paintHedge(g, px, py, tx, ty);
   }
   // light top edge / dark base only where the planted area ENDS, so a block of tiles reads as one big mass
-  if (ty > 0 && !isPlanted(tx, ty - 1)) { g.fillStyle = 'rgba(190,240,170,0.22)'; g.fillRect(px, py, TILE, 3); }
+  if (ty > 0 && !isPlanted(tx, ty - 1) && getTile(tx, ty - 1) !== 'k') { g.fillStyle = 'rgba(190,240,170,0.22)'; g.fillRect(px, py, TILE, 3); }
   if (liftedFront(tx, ty)) paintBedWall(g, px, py, tx, ty);                                  // zone 3: the bed stands on a semi-wall
   else if (!isPlanted(tx, ty + 1)) { g.fillStyle = 'rgba(0,0,0,0.38)'; g.fillRect(px, py + TILE - 6, TILE, 6); }
 }
@@ -794,7 +794,7 @@ function drawExtinguisher(x, y) {
 }
 // the concrete landing at the top of the lawn steps (zone 3, 'y'): the colour of the treads
 function drawLanding(px, py, tx, ty) {
-  const same = (x, y) => getTile(x, y) === 'y' || getTile(x, y) === 'u';
+  const same = (x, y) => getTile(x, y) === 'y' || getTile(x, y) === 'u' || getTile(x, y) === 'n';
   ctx.fillStyle = '#bdbab0'; ctx.fillRect(px, py, TILE, TILE);
   for (let i = 0; i < 4; i++) { ctx.fillStyle = i % 2 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.14)'; ctx.fillRect(px + 2 + Math.floor(rnd(tx, ty, i) * 28), py + 2 + Math.floor(rnd(tx, ty, i + 20) * 28), 2, 1); }
   if (same(tx, ty + 1)) { ctx.fillStyle = 'rgba(0,0,0,0.07)'; ctx.fillRect(px, py + TILE - 1, TILE, 1); }     // faint slab joints between landing tiles
@@ -805,7 +805,10 @@ function drawLanding(px, py, tx, ty) {
   if (!same(tx, ty - 1) && getTile(tx, ty - 1) !== 'q') ctx.fillRect(px, py, TILE, 2);
 }
 function drawFlight(px, py, tx, ty) {
-  const me = getTile(tx, ty), top = getTile(tx, ty - 1) !== me, bottom = getTile(tx, ty + 1) !== me;
+  const me = getTile(tx, ty), flip = me === 'n';                           // 'n' = the flight north of the landing: the same picture turned upside down (treads / risers / end posts)
+  const top = getTile(tx, ty + (flip ? 1 : -1)) !== me, bottom = getTile(tx, ty + (flip ? -1 : 1)) !== me;
+  ctx.save();
+  if (flip) { ctx.translate(0, 2 * py + TILE); ctx.scale(1, -1); }
   for (let i = 0; i < 2; i++) {                                            // two small steps per tile (the flight's steps are smaller than the tiers')
     const y = py + i * 16;
     ctx.fillStyle = '#bdbab0'; ctx.fillRect(px, y, TILE, 11);               // tread
@@ -823,7 +826,7 @@ function drawFlight(px, py, tx, ty) {
     if (top)    { ctx.fillStyle = '#eef1f3'; ctx.fillRect(x - 1, py, 6, 4); ctx.fillStyle = '#7d858b'; ctx.fillRect(x - 1, py + 3, 6, 1); }   // end posts
     if (bottom) { ctx.fillStyle = '#eef1f3'; ctx.fillRect(x - 1, py + TILE - 5, 6, 5); ctx.fillStyle = '#7d858b'; ctx.fillRect(x - 1, py + TILE - 2, 6, 2); }
   }
-  if (me === 'u' && getTile(tx + 1, ty) === 'q') {                          // the small silver handrail on the wall side of the lawn steps (as in the photo), same drawing as zone 1's
+  if ((me === 'u' || me === 'n') && getTile(tx + 1, ty) === 'q') {                          // the small silver handrail on the wall side of the lawn steps (as in the photo), same drawing as zone 1's
     const x = px + TILE - 8;
     ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(x + 2, py + (top ? 2 : 0), 5, TILE - (top ? 2 : 0));
     ctx.fillStyle = '#9aa2a8'; ctx.fillRect(x, py, 4, TILE);
@@ -831,6 +834,7 @@ function drawFlight(px, py, tx, ty) {
     if (top)    { ctx.fillStyle = '#eef1f3'; ctx.fillRect(x - 1, py, 6, 4); ctx.fillStyle = '#7d858b'; ctx.fillRect(x - 1, py + 3, 6, 1); }
     if (bottom) { ctx.fillStyle = '#eef1f3'; ctx.fillRect(x - 1, py + TILE - 5, 6, 5); ctx.fillStyle = '#7d858b'; ctx.fillRect(x - 1, py + TILE - 2, 6, 2); }
   }
+  ctx.restore();
 }
 
 
@@ -847,14 +851,16 @@ function drawFlight(px, py, tx, ty) {
 //   P_X0 / P_X1 = left / right edge of the portal (the middle tile is 32-64)     P_TOP = top edge of the portal AND of the wall piers
 //   (the wall face is as tall as the frame, so the roof gets shorter when P_TOP gets smaller)
 const P_X0 = 24, P_X1 = 72, P_TOP = 36, FRAME = 3, FLOOR_Y = 90;
-const BLOCKS = { zone1: [{ tx: 22, ty: 0 }], zone3: [{ tx: 11, ty: 30, ext: 64, mirror: true, extinguisher: { x: 439, y: 903 } }] };   // ext = px of extra roof BEHIND the 3x3 block (zone 3: 2 more rows, the roof is 3 tiles deep)
+const BLOCKS = { zone1: [{ tx: 24, ty: 0 }], zone3: [{ tx: 11, ty: 35, ext: 64, mirror: true, extinguisher: { x: 439, y: 1063 } }, { tx: 11, ty: 25, ext: 64, mirror: true, back: true }] };   // ext = px of extra roof BEHIND the 3x3 block (zone 3: 2 more rows, the roof is 3 tiles deep)
 //   // top-left tile of each 3x3 block per zone; mirror = the louvered face is on the EAST (zone 3: it faces the stairs, as in the photo)
-function drawBasementBlocks(camera) { for (const B of BLOCKS[zoneId] ?? []) drawBasementBlock(camera, B); }
+//   // back = the room seen from its BACK (zone 3, the second storage room: its door is on the north side, hidden from the camera; we see the roof and the concrete back wall on the south side, drawBlockBack)
+function drawBasementBlocks(camera) { for (const B of BLOCKS[zoneId] ?? []) (B.back ? drawBlockBack : drawBasementBlock)(camera, B); }
 function drawBasementBlock(camera, BLOCK) {
   const bx = BLOCK.tx * TILE, by = BLOCK.ty * TILE, E = BLOCK.ext ?? 0;
-  if (bx > camera.x + VW || bx + 3 * TILE < camera.x || by - E > camera.y + VH || by + 3 * TILE < camera.y) return;
+  const FY = !!BLOCK.flipY;
+  if (bx > camera.x + VW || bx + 3 * TILE < camera.x || by - (FY ? 0 : E) > camera.y + VH || by + 3 * TILE + (FY ? E : 0) < camera.y) return;
   ctx.save();
-  if (BLOCK.mirror) { ctx.translate(bx + 96, by); ctx.scale(-1, 1); } else ctx.translate(bx, by);   // from here on: block-local pixels (0,0 = top-left of the block)
+  ctx.translate(bx + (BLOCK.mirror ? 96 : 0), by + (FY ? 96 : 0)); ctx.scale(BLOCK.mirror ? -1 : 1, FY ? -1 : 1);   // from here on: block-local pixels (0,0 = top-left of the block)
   const R = (x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); };
   // roof: bands get lighter towards the tall front
   const bh = (P_TOP + E) / 4;                                                             // (E = extra roof behind the block: the roof starts E px above the block's top, y = -E)
@@ -890,10 +896,32 @@ function drawBasementBlock(camera, BLOCK) {
     ctx.moveTo(ix1 - 2.5 - k(ya), ya); ctx.lineTo(ix1 - 2.5 - k(yb), yb); ctx.stroke();
   });
   R(ix0, it, 3, ih, 'rgba(0,0,0,0.30)'); R(ix1 - 3, it, 3, ih, 'rgba(0,0,0,0.30)');     // shaded side walls
-  ctx.drawImage(getFloor(zoneId, cols, rows), bx + (BLOCK.mirror ? 96 - ix1 : ix0), by + FLOOR_Y, iw, 96 - FLOOR_Y, ix0, FLOOR_Y, iw, 96 - FLOOR_Y);   // landing: the same stone paving as the floor
+  ctx.drawImage(getFloor(zoneId, cols, rows), bx + (BLOCK.mirror ? 96 - ix1 : ix0), FY ? by : by + FLOOR_Y, iw, 96 - FLOOR_Y, ix0, FLOOR_Y, iw, 96 - FLOOR_Y);   // landing: the same stone paving as the floor
   R(ix0, FLOOR_Y, iw, 1, '#cfd3d6');                                                    // metal edge strip at the drop
   ctx.restore();
   if (BLOCK.extinguisher) drawExtinguisher(BLOCK.extinguisher.x, BLOCK.extinguisher.y);
+}
+
+// The second storage room (zone 3, north of the hedge patch): its door faces NORTH, away from the camera, so (in the same oblique view as the other room) the door is hardly
+// seen - just the top of the lintel over a dark slit - and what shows is the roof sloping down from the tall front and the plain concrete BACK wall on the south side.
+function drawBlockBack(camera, B) {
+  const bx = B.tx * TILE, by = B.ty * TILE, H = 96 + (B.ext ?? 0), WALL = 26, RH = H - WALL;    // H = whole height (3 rows + roof), WALL = height of the back wall face, RH = roof
+  if (bx > camera.x + VW || bx + 3 * TILE < camera.x || by > camera.y + VH || by + H < camera.y) return;
+  ctx.save(); ctx.translate(bx, by);
+  const R = (x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); };
+  const bh = RH / 4;                                                                       // roof bands: lightest at the tall front (north), darker towards the back
+  ['#a8a69d', '#9e9c93', '#94928a', '#8a8880'].forEach((c, i) => R(0, Math.round(i * bh), 96, Math.ceil(bh), c));
+  for (const x of [10, 21, 42, 53, 74, 85]) R(x, 0, 1, RH, 'rgba(0,0,0,0.08)');            // board-formed seams
+  R(0, 0, 96, 1, '#c4c2b8');                                                               // lit front edge of the roof
+  R(24, 0, 48, 8, '#d8cfbd'); R(24, 0, 48, 1, '#ece4d3'); R(27, 2, 42, 6, '#06070a'); R(27, 2, 42, 2, '#15171b');   // the top of the portal peeking over the edge: frame + dark slit
+  R(0, RH - 3, 96, 3, 'rgba(0,0,0,0.16)');                                                 // shade where the roof meets the back wall
+  R(0, RH, 96, WALL, '#bcb9ae'); R(0, RH, 96, 2, '#d9d6cb');                               // the concrete back wall, lit along its top
+  for (const x of [16, 32, 48, 64, 80]) { R(x, RH + 2, 1, WALL - 4, 'rgba(0,0,0,0.10)'); R(x + 1, RH + 2, 1, WALL - 4, 'rgba(255,255,255,0.06)'); }   // board-formed seams
+  R(0, H - 3, 96, 3, 'rgba(0,0,0,0.24)');                                                  // dark foot
+  R(88, 0, 8, H, '#6b6a73');                                                               // louvered east face (towards the stairs), full height
+  for (let y = 2; y < H - 3; y += 3) R(88, y, 8, 1, 'rgba(0,0,0,0.25)');
+  R(95, 0, 1, H, '#8f8e98'); R(88, 0, 1, H, 'rgba(0,0,0,0.25)');
+  ctx.restore();
 }
 
 // Tiles that stand on the grey stone paving (see floor.js). Everything else keeps its flat colour from COLORS.
@@ -922,7 +950,7 @@ function drawTile(ch, px, py, tx, ty, time) {
     const wf = zoneId === 'zone1' && WATER_FILTERS.find((f) => ty >= f.y0 && ty <= f.y1);
     if (wf) drawWaterFilter(px, py, ty, wf);
     if (zoneId === 'zone2') drawRestroomWall(px, py, tx, ty);   // signs / lamp / bucket / louvers beside the restroom doors
-    if (zoneId === 'zone3' && ty === 45 && tx >= 1 && tx <= 9) { ctx.fillStyle = '#e0a82e'; ctx.fillRect(px, py, TILE, 3); }   // yellow floor line along the foot of the curtained doors (see drawCurtainDoor)
+    if (zoneId === 'zone3' && ty === 50 && tx >= 1 && tx <= 9) { ctx.fillStyle = '#e0a82e'; ctx.fillRect(px, py, TILE, 3); }   // yellow floor line along the foot of the curtained doors (see drawCurtainDoor)
   } else if (ch === '#') {
     ctx.fillStyle = '#44444d'; ctx.fillRect(px, py + TILE - 6, TILE, 6);
     ctx.fillStyle = 'rgba(0,0,0,0.10)'; ctx.fillRect(px + 10, py, 1, TILE - 6); ctx.fillRect(px + 21, py, 1, TILE - 6);   // board-formed concrete seams
@@ -974,7 +1002,7 @@ function drawTile(ch, px, py, tx, ty, time) {
     drawLanding(px, py, tx, ty);
   } else if (ch === 'q') {                            // hedge semi-wall
     drawSemiWall(px, py, tx, ty);
-  } else if ((ch === 'S' && (zoneId === 'zone1' || zoneId === 'zone3')) || ch === 'u') {      // zones 1 and 3: the railed stair flights ('u' = the plain flight up to zone 3's lawn)
+  } else if ((ch === 'S' && (zoneId === 'zone1' || zoneId === 'zone3')) || ch === 'u' || ch === 'n') {      // zones 1 and 3: the railed stair flights ('u' = the plain flight up to zone 3's lawn)
     drawFlight(px, py, tx, ty);
   } else if (ch === 'S') {                            // stairs: horizontal steps
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -1497,6 +1525,11 @@ function drawPlayer(player) {
     const cx = player.cx, cy = player.y + player.h / 2, k = intro.rider.scale;
     ctx.globalAlpha = Math.max(0, intro.rider.alpha);
     ctx.translate(cx, cy); ctx.scale(k, k); ctx.translate(-cx, -cy);
+  }
+  if (player.descent > 0 && !intro.active) {          // going down the big stairs: he dims and gets a little smaller as he descends into the dark
+    const d = player.descent, fx = player.cx, fy = player.y + player.h;
+    ctx.globalAlpha *= 1 - 0.5 * d;
+    ctx.translate(fx, fy); ctx.scale(1 - 0.1 * d, 1 - 0.1 * d); ctx.translate(-fx, -fy);
   }
   const lean = skyline.bodyShift();                  // leaning out: the sprite shifts a few px toward the rail
   ctx.translate(lean.x, lean.y + (intro.active ? 0 : player.stairBob));   // on the stairs: the body lifts a little with every step
