@@ -142,8 +142,8 @@ function buildThinWalls() {
   }
   if (zoneId === 'zone3') for (let ty = 0; ty < rows; ty++) for (let tx = 0; tx < cols - 1; tx++) {   // the small handrail down the east side of the lawn steps ('u' beside the border wall): see drawFlight()
     const c = grid[ty][tx];                                         // 'u' = the flight south of the landing, 'n' = the flipped one north of it
-    if ((c !== 'u' && c !== 'n') || grid[ty][tx + 1] !== 'q') continue;
-    const x = tx * TILE + TILE - 8, y = ty * TILE;
+    if ((c !== 'u' && c !== 'n') || (grid[ty][tx + 1] !== 'q' && !(tx > 0 && grid[ty][tx - 1] === 'q'))) continue;
+    const x = tx * TILE + (grid[ty][tx + 1] === 'q' ? TILE - 8 : 4), y = ty * TILE;   // west flights: wall on the east; east flights (mirror image): wall on the west
     thinWalls.push({ x, y, w: 4, h: TILE });
     if (grid[ty - 1][tx] !== c) thinWalls.push({ x: x - 1, y, w: 6, h: 4 });
     if (grid[ty + 1][tx] !== c) thinWalls.push({ x: x - 1, y: y + TILE - 5, w: 6, h: 5 });

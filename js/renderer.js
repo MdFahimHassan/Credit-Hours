@@ -78,7 +78,7 @@ function disc(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.
 // Zone 3: the hedge bed round the storage room is LIFTED to the level of the lawn-step landing - it sits on a low board-formed concrete semi-wall (the same one as zone 1's
 // hedge beds). Seen from above only the wall's FRONT face shows: the south edge of the bed wherever it faces open floor (the landing and the storage room are flush with the bed).
 const WALL_H = 10;                                                 // px: height of the semi-wall's front face under the hedge
-const liftedFront = (x, y) => zoneId === 'zone3' && isPlanted(x, y) && !isPlanted(x, y + 1) && getTile(x, y + 1) === '.';
+const liftedFront = (x, y) => zoneId === 'zone3' && isPlanted(x, y) && !isPlanted(x, y + 1) && (getTile(x, y + 1) === '.' || getTile(x, y + 1) === '#');   // ('#': the east bed's south end stands against the south wall - its semi-wall face shows there too)
 function paintBedWall(g, px, py, tx, ty) {
   const y = py + TILE - WALL_H;
   g.fillStyle = '#6f6d66'; g.fillRect(px, y, TILE, WALL_H);                                  // front face: same shade as the semi-wall's / tiers' risers
@@ -143,7 +143,7 @@ function railV(x, y, east, g = ctx, sh = true) {          // vertical rail segme
 // The two hedge beds beside the stairs (zone 1, rows 0-5: x3-5 and x18-20) sit against the semi-wall and the steps, which are solid, so they
 // used to get no guard rail. A rail is now drawn on those faces too (same rail as every other hedge). The top edge (map edge) stays open.
 const isStairBed = (x, y) => zoneId === 'zone1' && y >= 0 && y <= 5 && ((x >= 3 && x <= 5) || (x >= 18 && x <= 20));
-const isRailable = (x, y, fx, fy) => !isPlanted(x, y) && getTile(x, y) !== 'g' && getTile(x, y) !== 'y' &&   /* (the lawn-step landing has its own white fence) */ (!isSolid(x, y) || (isStairBed(fx, fy) && (getTile(x, y) === 'q' || getTile(x, y) === 'm' || isTierCh(getTile(x, y)))));   // (fx, fy) = the hedge tile asking
+const isRailable = (x, y, fx, fy) => !isPlanted(x, y) && getTile(x, y) !== 'g' && getTile(x, y) !== 'y' && getTile(x, y) !== 'u' && getTile(x, y) !== 'n' &&   /* (the lawn-step landing has its own white fence) */ (!isSolid(x, y) || (isStairBed(fx, fy) && (getTile(x, y) === 'q' || getTile(x, y) === 'm' || isTierCh(getTile(x, y)))));   // (fx, fy) = the hedge tile asking
 function drawGuardRail(px, py, tx, ty) {
   const open = (x, y) => isRailable(x, y, tx, ty);   // floor / path next to the planted area (or the wall / steps beside a stair-side bed)
   const fenced = zoneId === 'zone3';                                           // zone 3: the north and west edges of the lifted bed carry the white fence (zones.js `fences`), level with the landing's
@@ -803,6 +803,10 @@ function drawLanding(px, py, tx, ty) {
   if (!same(tx - 1, ty) && !isPlanted(tx - 1, ty)) ctx.fillRect(px, py, 2, TILE);   // (no edge shade where the hedge bed is flush with the landing)
   if (getTile(tx + 1, ty) === 'g') ctx.fillRect(px + TILE - 2, py, 2, TILE);
   if (!same(tx, ty - 1) && getTile(tx, ty - 1) !== 'q') ctx.fillRect(px, py, TILE, 2);
+  if (getTile(tx, ty - 1) === '.') {                                                                         // the platform's north edge stands above the path: a concrete kerb lip (lit top, shaded face) so it reads as raised
+    ctx.fillStyle = 'rgba(0,0,0,0.20)'; ctx.fillRect(px, py, TILE, 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(px, py + 4, TILE, 1);
+  }
 }
 function drawFlight(px, py, tx, ty) {
   const me = getTile(tx, ty), flip = me === 'n';                           // 'n' = the flight north of the landing: the same picture turned upside down (treads / risers / end posts)
@@ -826,8 +830,9 @@ function drawFlight(px, py, tx, ty) {
     if (top)    { ctx.fillStyle = '#eef1f3'; ctx.fillRect(x - 1, py, 6, 4); ctx.fillStyle = '#7d858b'; ctx.fillRect(x - 1, py + 3, 6, 1); }   // end posts
     if (bottom) { ctx.fillStyle = '#eef1f3'; ctx.fillRect(x - 1, py + TILE - 5, 6, 5); ctx.fillStyle = '#7d858b'; ctx.fillRect(x - 1, py + TILE - 2, 6, 2); }
   }
-  if ((me === 'u' || me === 'n') && getTile(tx + 1, ty) === 'q') {                          // the small silver handrail on the wall side of the lawn steps (as in the photo), same drawing as zone 1's
-    const x = px + TILE - 8;
+  const wallE = getTile(tx + 1, ty) === 'q', wallW = getTile(tx - 1, ty) === 'q';          // the lawn wall is on the east (west steps) or the west (east steps, a mirror image)
+  if ((me === 'u' || me === 'n') && (wallE || wallW)) {                                     // the small silver handrail on the wall side of the lawn steps (as in the photo), same drawing as zone 1's
+    const x = wallE ? px + TILE - 8 : px + 4;
     ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(x + 2, py + (top ? 2 : 0), 5, TILE - (top ? 2 : 0));
     ctx.fillStyle = '#9aa2a8'; ctx.fillRect(x, py, 4, TILE);
     ctx.fillStyle = '#e3e7ea'; ctx.fillRect(x + 1, py, 2, TILE);

@@ -74,7 +74,7 @@ export const ZONES = {
   zone1: {
     name: 'Rooftop Entry',
     rows: [
-    "eUqHYH876SS66SS678YHYqUUkkkHHHHRRRRRRR",
+    "eUqHYH876SS66SS678YHYqUUkkkHHHHUURRRRR",
     "#.qYHH765SS55SS567HZHq..kkkYHHH......R",
     "j.qHHY654SS44SS456HYZq..kkkHHHH..CCC.R",
     "j.qZHH543SS33SS345ZHHq.....HYHH..CTC.R",
@@ -115,6 +115,9 @@ export const ZONES = {
       '22,0': { to: 'zone3', spawn: { x: 58, y: 50 }, facing: 'up', label: 'Lawn path (right)' },
       '23,0': { to: 'zone3', spawn: { x: 59, y: 50 }, facing: 'up', label: 'Lawn path (right)' },
       // bottom-left opening beside the gym: the 1-tile path along row 28 of the pool zone
+      // 2-wide path at the top right (x31-32, right of the hedge bed): leads up to zone 3, to the 2-tile path right of the east hedge bed (x66-67)
+      '31,0': { to: 'zone3', spawn: { x: 66, y: 50 }, facing: 'up', label: 'Lawn path (far right)' },
+      '32,0': { to: 'zone3', spawn: { x: 67, y: 50 }, facing: 'up', label: 'Lawn path (far right)' },
       '0,28': { to: 'zone2', spawn: { x: 29, y: 28 }, facing: 'left', label: 'Pool zone path' },
     },
   },
@@ -230,16 +233,16 @@ export const ZONES = {
       "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
-      "X...............qggggggggggggggggqSSqqSSqggggggggggggggggq..........R",
-      "X...............qggggggggggggggggqSSqqSSqggggggggggggggggq..........R",
-      "#ww#ww#ww#.#####qqqqqqqqqqqqqqqqqqSSqqSSqqqqqqqqqqqqqqqqqq..#########",
-      "##########X######################qSSqqSSq#################XX#########",
+      "R...............qggggggggggggggggggggggggggggggggggggggggyyyHYHHYH..R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggyyyYHHYHH..R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggyyyHHYHHY..R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggquuHYHHZH..R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggquuYHHYHH..R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggquuHHYHHY..R",
+      "X...............qggggggggggggggggqSSqqSSqggggggggggggggggq..HYHHYH..R",
+      "X...............qggggggggggggggggqSSqqSSqggggggggggggggggq..YHHYHH..R",
+      "#ww#ww#ww#.#####qqqqqqqqqqqqqqqqqqSSqqSSqqqqqqqqqqqqqqqqqq..######..#",
+      "##########X######################qSSqqSSq#################XX######XX#",
     ],
     exits: {
       // the 1-tile entry path from zone 1 (zone 1's up-path at x 1) - it now runs at x 10, right beside the lawn's west border (x 11)
@@ -247,6 +250,9 @@ export const ZONES = {
       // the 2-wide opening in the south wall at the foot of the east path (right of the lawn): back to zone 1's right-hand path beside the storage room
       '58,51': { to: 'zone1', spawn: { x: 22, y: 1 }, facing: 'down', label: 'Right path' },
       '59,51': { to: 'zone1', spawn: { x: 23, y: 1 }, facing: 'down', label: 'Right path' },
+      // the 2-wide opening at the foot of the 2-tile path right of the east hedge bed: back to zone 1's far-right path (x31-32)
+      '66,51': { to: 'zone1', spawn: { x: 31, y: 1 }, facing: 'down', label: 'Far right path' },
+      '67,51': { to: 'zone1', spawn: { x: 32, y: 1 }, facing: 'down', label: 'Far right path' },
       // west path (zone 4 was removed - the rooftop is L-shaped). The upper west path (old exit at (0,5)) was removed: that tile is now plain rail. The lower one leads to zone 2's north corridor
       // the 2-wide railed path from zone 2's north corridor, in the bottom-left corner of the west edge (zone 2 rows 1-2 <-> rows 26-27 here)
       '0,48': { to: 'zone2', spawn: { x: 29, y: 1 }, facing: 'left', label: 'West path (lower)' },
@@ -256,7 +262,8 @@ export const ZONES = {
     // This one is 4 wide x 8 tall (x11-14, rows 18-25), 2 tiles of path in front of it (rows 26-27) and 1 tile between it and the lawn's west border (x15, border at x16).
     // r = corner radius in tiles (leave it out for the full capsule, r: 2 here).
     stairwells: [{ x: 6, y: 11, w: 9, h: 12, r: 1, sw: 8, len: 9 }],   // the big stairs down (stairwell.js): 2 tiles wide, open on the east (lawn) side, fading into black - the lower floor comes later
-    holes: [{ x: 11, y: 40, w: 4, h: 8, r: 1 }],   // the north hole was removed (the space is kept for the big stairs down)
+    holes: [{ x: 11, y: 40, w: 4, h: 8, r: 1 }, { x: 59, y: 33, w: 4, h: 8, r: 1 }],   // 2nd hole = a copy of the first on the EAST side, above the east lawn steps: x59-62, rows 33-40 = 1 tile from the lawn border (x57; free column x58) and 1 tile above the landing / hedge bed (free row 41)
+    //   // the north hole was removed (the space is kept for the big stairs down)
     // curved rails (curverail.js): the west rail steps in 8 tiles beside the hole (straight at x8, rows 19-24, 2 tiles of floor between it and the hole) like the hole's own balustrade: straight runs with rounded
     // corners (r: 1 tile) only at the turns - across on rows 17 and 25, where the old walls were. The lower return runs straight into the rail of the path to zone 2.
     // The skyline stays one straight picture to the left of it. The x0 tiles of rows 17-25 are 'R' (solid) but are not drawn: the curve is.
@@ -271,6 +278,9 @@ export const ZONES = {
       { points: [[6.0625, 1], [6.0625, 8], [8.9375, 8], [8.9375, 1]] },       // west bed: west side, front, east side (facing the path)
       { points: [[16.5, 8], [11.0625, 8], [11.0625, 1]] },                    // east bed: the lawn's west rail turns LEFT here (it starts at (16.5, 8)) and runs along the front of the bed, then up its west side (facing the path)
       { points: [[15.9375, 1], [15.9375, 3.5625], [16.5, 3.5625]] },          // east bed: its east side above the lawn, joined to the start of the lawn's north rail (16.5, 3.5625); along rows 3-7 the bed meets the lawn's wall and has no fence (the lawn's rail is left out there, renderer.js hedgeSide)
+      // EAST lawn steps (a mirror image of the west ones): the white fence runs round the east hedge bed (x60-65, rows 42-49 = from the landing down to the south wall, 2 tiles of path x66-67 stay free beside it): along its west side (the landing's and the flights' hedge side), across the north end and down its east side
+      { points: [[59.9375, 49.6875], [59.9375, 42], [65.9375, 42], [65.9375, 49.6875]] },
+      { points: [[57.5, 42], [59.9375, 42]] },                                  // the landing's north side: joins the lawn's east rail (its end post at x57.5, row 42) to the hedge bed's fence, so nobody walks off the platform
     ],
   },
 };
