@@ -110,7 +110,7 @@ export const ZONES = {
       '0,10': { to: 'zone2', spawn: { x: 29, y: 9 },  facing: 'left', label: 'Right path' },
       '0,19': { to: 'zone2', spawn: { x: 29, y: 19 }, facing: 'left', label: 'Left path' },
       '0,20': { to: 'zone2', spawn: { x: 29, y: 20 }, facing: 'left', label: 'Left path' },
-      '1,0':  { to: 'zone3', spawn: { x: 10, y: 40 }, facing: 'up', label: 'Up path (left)' },
+      '1,0':  { to: 'zone3', spawn: { x: 10, y: 45 }, facing: 'up', label: 'Up path (left)' },
       // 2-wide path at the top right: will lead to the upper zone (no 'to' yet = just shows a hint)
       '27,0': { label: 'Upper zone path' },
       '28,0': { label: 'Upper zone path' },
@@ -173,8 +173,8 @@ export const ZONES = {
       '30,10': { to: 'zone1', spawn: { x: 1, y: 11 }, facing: 'right', label: 'Right path' },
       '30,19': { to: 'zone1', spawn: { x: 1, y: 19 }, facing: 'right', label: 'Left path' },
       // the north corridor (rows 1-2) runs east along the top of the hedge and leaves the zone at x 30 -> Lawn Zone (west path, lower)
-      '30,1':  { to: 'zone3', spawn: { x: 1, y: 38 }, facing: 'right', label: 'Lawn zone path' },
-      '30,2':  { to: 'zone3', spawn: { x: 1, y: 39 }, facing: 'right', label: 'Lawn zone path' },
+      '30,1':  { to: 'zone3', spawn: { x: 1, y: 43 }, facing: 'right', label: 'Lawn zone path' },
+      '30,2':  { to: 'zone3', spawn: { x: 1, y: 44 }, facing: 'right', label: 'Lawn zone path' },
       '30,28': { to: 'zone1', spawn: { x: 1, y: 28 }, facing: 'right', label: 'Pool zone path' },   // the 1-tile path along row 28 meets zone 1's bottom-left opening
     },
   },
@@ -186,7 +186,7 @@ export const ZONES = {
   //   STAIRS: two small railed flights (2 lanes + a white handrail, rows 26-29) copied from zone 1's: x29-30 and x33-34, with a 2-tile block (x31-32) between them.
   zone3: {
     name: 'Lawn Zone',
-    spawn: { x: 10, y: 40 },
+    spawn: { x: 10, y: 45 },
     rows: [
       "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
       "R.....HHY..HHHHY....................................................R",
@@ -197,6 +197,11 @@ export const ZONES = {
       "R.CTC.HHH..HYHHHqggggggggggggggggggggggggggggggggggggggggq..........R",
       "R.CTC.HYH..YHHHHqggggggggggggggggggggggggggggggggggggggggq..........R",
       "R.CCC...........qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq..........R",
@@ -233,26 +238,27 @@ export const ZONES = {
     ],
     exits: {
       // the 1-tile entry path from zone 1 (zone 1's up-path at x 1) - it now runs at x 10, right beside the lawn's west border (x 11)
-      '10,41': { to: 'zone1', spawn: { x: 1, y: 1 }, facing: 'down', label: 'Entry path' },
+      '10,46': { to: 'zone1', spawn: { x: 1, y: 1 }, facing: 'down', label: 'Entry path' },
       // west path (zone 4 was removed - the rooftop is L-shaped). The upper west path (old exit at (0,5)) was removed: that tile is now plain rail. The lower one leads to zone 2's north corridor
       // the 2-wide railed path from zone 2's north corridor, in the bottom-left corner of the west edge (zone 2 rows 1-2 <-> rows 26-27 here)
-      '0,38': { to: 'zone2', spawn: { x: 29, y: 1 }, facing: 'left', label: 'West path (lower)' },
-      '0,39': { to: 'zone2', spawn: { x: 29, y: 2 }, facing: 'left', label: 'West path (lower)' },
+      '0,43': { to: 'zone2', spawn: { x: 29, y: 1 }, facing: 'left', label: 'West path (lower)' },
+      '0,44': { to: 'zone2', spawn: { x: 29, y: 2 }, facing: 'left', label: 'West path (lower)' },
     },
     // capsule-shaped holes you can look down through, ringed by a balustrade (hole.js). Tile units: x, y, w, h of the OUTER edge.
     // This one is 4 wide x 8 tall (x11-14, rows 18-25), 2 tiles of path in front of it (rows 26-27) and 1 tile between it and the lawn's west border (x15, border at x16).
     // r = corner radius in tiles (leave it out for the full capsule, r: 2 here).
-    holes: [{ x: 11, y: 30, w: 4, h: 8, r: 1 }, { x: 11, y: 11, w: 4, h: 8, r: 1 }],   // the 2nd one (north) is an exact copy of the 1st, with ONE free row between it and the hedge bed below
+    stairwells: [{ x: 6, y: 10, w: 9, h: 14, r: 1, sw: 8, len: 9 }],   // the big stairs down (stairwell.js): 2 tiles wide, open on the east (lawn) side, fading into black - the lower floor comes later
+    holes: [{ x: 11, y: 35, w: 4, h: 8, r: 1 }],   // the north hole was removed (the space is kept for the big stairs down)
     // curved rails (curverail.js): the west rail steps in 8 tiles beside the hole (straight at x8, rows 19-24, 2 tiles of floor between it and the hole) like the hole's own balustrade: straight runs with rounded
     // corners (r: 1 tile) only at the turns - across on rows 17 and 25, where the old walls were. The lower return runs straight into the rail of the path to zone 2.
     // The skyline stays one straight picture to the left of it. The x0 tiles of rows 17-25 are 'R' (solid) but are not drawn: the curve is.
     roundedCorners: [{ corner: 'nw', r: 1 }],   // the north-west corner of the rail is a quarter circle (curverail.js cornerPath)
-    curvedRails: [{ y0: 29, y1: 38, depth: 8, r: 1 }, { y0: 10, y1: 19, depth: 8, r: 1, closed: true }],   // the 2nd (north) bay is a copy of the 1st (same size) but CLOSED: it has no path at its end, so its rail curves back into the west edge
+    curvedRails: [{ y0: 34, y1: 43, depth: 8, r: 1 }, { y0: 10, y1: 24, depth: 4, r: 1, closed: true }],   // the 2nd (north) bay is CLOSED, only 4 tiles deep and 14 rows tall (rows 10-23, ONE free row 9 below the bench ring): it has no path at its end, so its rail curves back into the west edge
     // white fences (map.js fences, drawn by renderer.js drawFence, solid): chains of points in tile units (x, y of the FOOT of the fence). This one closes the north side of the
     // landing at the top of the lawn steps (x14-16, row 8, to the lawn rail's end post at x16.5). The west side has no fence: the hedge bed (lifted to the landing's level on a semi-wall) is flush with it.
     fences: [
-      { points: [[14.0625, 20], [16.5, 20]] },                                  // the landing's north side
-      { points: [[7.0625, 27.6875], [7.0625, 20], [14.0625, 20]] },
+      { points: [[14.0625, 25], [16.5, 25]] },                                  // the landing's north side
+      { points: [[7.0625, 32.6875], [7.0625, 25], [14.0625, 25]] },
       // the north hedge beds (x6-8 and x11-15, rows 1-7, split by the 2-tile path x9-10): the white fence runs all round each bed, in front of it too (on the floor, row 8's top edge)
       { points: [[6.0625, 1], [6.0625, 8], [8.9375, 8], [8.9375, 1]] },       // west bed: west side, front, east side (facing the path)
       { points: [[16.5, 8], [11.0625, 8], [11.0625, 1]] },                    // east bed: the lawn's west rail turns LEFT here (it starts at (16.5, 8)) and runs along the front of the bed, then up its west side (facing the path)
@@ -266,6 +272,8 @@ export const ZONES = {
 // Stairs: zone 3 has two railed flights (x 34-35 and x 38-39, rows 26-29) that match zone 1's two flights (x 9-10 and x 13-14, rows 0-4), lane for lane.
 const FLIGHTS = [[9, 34], [10, 35], [13, 38], [14, 39]];       // [x in zone 1, x in zone 3]
 for (const [x1, x3] of FLIGHTS) {
-  ZONES.zone3.exits[x3 + ',41'] = { to: 'zone1', spawn: { x: x1, y: 1 }, facing: 'down', label: 'Stairs' };
-  ZONES.zone1.exits[x1 + ',0']  = { to: 'zone3', spawn: { x: x3, y: 37 }, facing: 'up', label: 'Stairs' };
+  ZONES.zone3.exits[x3 + ',46'] = { to: 'zone1', spawn: { x: x1, y: 1 }, facing: 'down', label: 'Stairs' };
+  ZONES.zone1.exits[x1 + ',0']  = { to: 'zone3', spawn: { x: x3, y: 42 }, facing: 'up', label: 'Stairs' };
 }
+// The big stairs down (stairwell.js): the lower floor is not built yet. Standing at the dark end of the steps shows the 'coming soon' hint.
+for (let y = 13; y <= 20; y++) for (const x of [9, 10]) ZONES.zone3.exits[x + ',' + y] = { label: 'Stairs down' };

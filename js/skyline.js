@@ -78,7 +78,7 @@ const STAIRS_DARK = ['zone1'];
 //   zone 3 south: the 1-tile entry path from zone 1 is just a path between two plain walls.  zone 3 west: the path to zone 2 has a rail on its north side only (the south side is the wall)
 const PATH_RAILS = { zone3: { s: [false, false], w: [true, false] } };
 // WINDOW_TRIM: px cut off the END of the last skyline window of a side, so the rail of the open path that follows it (see PATH_RAILS) is not painted over by the picture
-const WINDOW_TRIM = { zone3: { w: { b: 37, px: 24 } } };   // (the window whose last tile row is b)
+const WINDOW_TRIM = { zone3: { w: { b: 42, px: 24 } } };   // (the window whose last tile row is b)
 // SHARE: this side's skyline window does not paint its own picture, it shows the picture of another side (in THAT side's direction, so
 //   nothing turns). zone 1: the north window (x 31-37, top right) shows the east skyline, which simply carries on to the left.
 //   The source side gets DNEG extra px of near ground on the "wrong" side of its edge for that (see paintPano, dneg).

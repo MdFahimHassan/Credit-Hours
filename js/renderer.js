@@ -1,5 +1,5 @@
 // renderer.js - ALL drawing lives here. Game logic never touches the canvas.
-import { TILE, cols, rows, widthPx, heightPx, getTile, isSolid, items, zoneId, curvedRails, roundedCorners, inCurvedRail, lawnBox, RAIL_UP, fences } from './map.js';
+import { TILE, cols, rows, widthPx, heightPx, getTile, isSolid, items, zoneId, curvedRails, stairwells, roundedCorners, inCurvedRail, lawnBox, RAIL_UP, fences } from './map.js';
 import { railPath, cornerPath, RAIL_W } from './curverail.js';
 import { transition } from './transition.js';
 import { quest } from './quest.js';
@@ -9,6 +9,7 @@ import { intro } from './intro.js';
 import { drawWell, wellBox, wellTiles } from './escalator.js';
 import { drawCharacter } from './sprites.js';
 import { drawGlassFront, drawGlassTops } from './glass.js';
+import { drawStairwellInterior, drawStairwellRail } from './stairwell.js';
 import { skyline, drawSkyline, drawCurvedBays, drawCornerNotch } from './skyline.js';
 import { setVirtualUp, UP_ROWS, WATER_FILTERS } from './map.js';
 import { getFloor } from './floor.js';
@@ -846,7 +847,7 @@ function drawFlight(px, py, tx, ty) {
 //   P_X0 / P_X1 = left / right edge of the portal (the middle tile is 32-64)     P_TOP = top edge of the portal AND of the wall piers
 //   (the wall face is as tall as the frame, so the roof gets shorter when P_TOP gets smaller)
 const P_X0 = 24, P_X1 = 72, P_TOP = 36, FRAME = 3, FLOOR_Y = 90;
-const BLOCKS = { zone1: [{ tx: 22, ty: 0 }], zone3: [{ tx: 11, ty: 25, ext: 64, mirror: true, extinguisher: { x: 439, y: 743 } }] };   // ext = px of extra roof BEHIND the 3x3 block (zone 3: 2 more rows, the roof is 3 tiles deep)
+const BLOCKS = { zone1: [{ tx: 22, ty: 0 }], zone3: [{ tx: 11, ty: 30, ext: 64, mirror: true, extinguisher: { x: 439, y: 903 } }] };   // ext = px of extra roof BEHIND the 3x3 block (zone 3: 2 more rows, the roof is 3 tiles deep)
 //   // top-left tile of each 3x3 block per zone; mirror = the louvered face is on the EAST (zone 3: it faces the stairs, as in the photo)
 function drawBasementBlocks(camera) { for (const B of BLOCKS[zoneId] ?? []) drawBasementBlock(camera, B); }
 function drawBasementBlock(camera, BLOCK) {
@@ -921,7 +922,7 @@ function drawTile(ch, px, py, tx, ty, time) {
     const wf = zoneId === 'zone1' && WATER_FILTERS.find((f) => ty >= f.y0 && ty <= f.y1);
     if (wf) drawWaterFilter(px, py, ty, wf);
     if (zoneId === 'zone2') drawRestroomWall(px, py, tx, ty);   // signs / lamp / bucket / louvers beside the restroom doors
-    if (zoneId === 'zone3' && ty === 40 && tx >= 1 && tx <= 9) { ctx.fillStyle = '#e0a82e'; ctx.fillRect(px, py, TILE, 3); }   // yellow floor line along the foot of the curtained doors (see drawCurtainDoor)
+    if (zoneId === 'zone3' && ty === 45 && tx >= 1 && tx <= 9) { ctx.fillStyle = '#e0a82e'; ctx.fillRect(px, py, TILE, 3); }   // yellow floor line along the foot of the curtained doors (see drawCurtainDoor)
   } else if (ch === '#') {
     ctx.fillStyle = '#44444d'; ctx.fillRect(px, py + TILE - 6, TILE, 6);
     ctx.fillStyle = 'rgba(0,0,0,0.10)'; ctx.fillRect(px + 10, py, 1, TILE - 6); ctx.fillRect(px + 21, py, 1, TILE - 6);   // board-formed concrete seams
@@ -1399,6 +1400,7 @@ export function render(game, time) {
   drawBasementBlocks(camera);   // storage-room stairwell (k / z tiles): zone 1 and zone 3   // the escalator well + rounded end of the escalator railing
   drawFoliage(x0, x1, y0, y1);                       // leaves poking through / over the hedge rails
   drawGlassTops(ctx, time, camera, VW, VH);          // glass skylight + the students seen through it (after tiles, before characters)
+  for (const s of stairwells) { drawStairwellInterior(ctx, s, time); drawStairwellRail(ctx, s); }   // zone 3: the big stairs down (stairwell.js)
 
   // Item (ID card): small white card with a bobbing motion
   for (const it of items) {

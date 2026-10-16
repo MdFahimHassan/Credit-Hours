@@ -3,6 +3,7 @@
 // when loadZone() switches zones.
 import { ZONES } from './zones.js';
 import { holeBands } from './hole.js';
+import { stairwellBands } from './stairwell.js';
 import { railBands, curvedRailPx, roundedCornerPx } from './curverail.js';
 export const TILE = 32;
 
@@ -16,6 +17,7 @@ export let spawn = { x: 1, y: 1 };
 export let npcSpawn = { x: 2, y: 2 };
 export let items = [];                       // [{x, y, collected}] in tile coordinates
 export let holes = [];                       // capsule-shaped openings in the floor, in PIXELS: [{x, y, w, h}] - from the zone's `holes` (tile units), see hole.js
+export let stairwells = [];                  // big stairs down to the (not yet built) lower floor, in PIXELS: [{x, y, w, h}] - from the zone's `stairwells`, see stairwell.js
 export let roundedCorners = [];               // rounded rail corners in PIXELS: [{corner: 'nw', r}] - from the zone's `roundedCorners`, see curverail.js cornerPath
 export let curvedRails = [];                 // curved west-edge rails in PIXELS: [{y0, y1, depth, r}] - from the zone's `curvedRails` (tile units), see curverail.js
 let lawnBoxCache = null;
@@ -48,6 +50,7 @@ export function loadZone(id) {
   if (!itemCache[id]) itemCache[id] = found;
   items = itemCache[id];
   holes = (zone.holes ?? []).map((h) => ({ x: h.x * TILE, y: h.y * TILE, w: h.w * TILE, h: h.h * TILE, r: h.r === undefined ? undefined : h.r * TILE }));
+  stairwells = (zone.stairwells ?? []).map((s) => ({ x: s.x * TILE, y: s.y * TILE, w: s.w * TILE, h: s.h * TILE, r: s.r === undefined ? undefined : s.r * TILE, sw: s.sw === undefined ? undefined : s.sw * TILE, len: s.len === undefined ? undefined : s.len * TILE }));
   curvedRails = (zone.curvedRails ?? []).map((d) => curvedRailPx(d, TILE));
   roundedCorners = (zone.roundedCorners ?? []).map((d) => roundedCornerPx(d, TILE));
   fences = (zone.fences ?? []).map((f) => ({ pts: f.points.map(([x, y]) => [x * TILE, y * TILE]) }));
@@ -120,6 +123,7 @@ export const RAIL_UP = 15;   // how far (px) the white lawn rail stands up the s
 function buildThinWalls() {
   thinWalls = [];
   for (const h of holes) thinWalls.push(...holeBands(h));          // every hole is solid, following its curve exactly (hole.js)
+  for (const s of stairwells) thinWalls.push(...stairwellBands(s));   // the kerb ring + the barrier in the dark (stairwell.js); the steps are walkable
   for (const c of curvedRails) thinWalls.push(...railBands(c));    // so is everything outside a curved rail (curverail.js)
   const L = lawnBox();                                              // the white rail round the lawn: where it stops (the entrance), the end post stands up in front of the open floor - solid too
   if (L) for (const x of [L.x0, L.x1]) for (let y = L.y0 + 1; y <= L.y1; y++)
