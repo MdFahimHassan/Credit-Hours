@@ -74,7 +74,8 @@ function upperTile(tx, ty) {
   if (tx === 0) return ty === -1 ? UP_DOOR : '#';             // the west wall (cream, see renderer.js) carries on up; row -1 holds the top half of the new glass door (see UP_DOOR)
   if (tx === 2 || tx === 21) return 'q';                      // the 1-tile semi-wall borders of the stair-side hedge beds go on to the top (the hedges themselves end at the stairs)
   if (UP_HEDGES.includes(tx)) return grid[r][tx];
-  if (tx === 1 || (tx >= 22 && tx <= 26)) return '.';   // normal stone paving: the up-path (x1), behind the storage room, the lane
+  if (tx >= 24 && tx <= 26) return grid[(r + 2) % 6][tx + 3];   // the hedge BEHIND the storage room (x24-26, same plants as the bed beside it, shifted so the pattern does not repeat) carries on up to the top of the upper zone
+  if (tx === 1 || tx === 22 || tx === 23) return '.';   // normal stone paving: the up-path (x1) and the lane beside the storage room (the hedge behind the room is x24-26, see above)
   return 'g';                                                 // everything else: lawn (the hedges beside the stairs end at the stairs)
 }
 
@@ -85,7 +86,7 @@ export function getTile(tx, ty) {
   return grid[ty][tx];
 }
 export const swim = { on: false };   // true while the player is in the zone 2 pool: the water ('~') is then open to him (the rim 'B' stays solid, so the steel ladder is the only way in or out)
-const SOLID_TILES = '#RLlAfdDvEFB~MGKCTWHYZJQaoc12345678qmkejw';   // H = hedge, Y = bush mound, Z = tree, J = gym door, Q = gym poster wall, c = pillar, 1-6 = amphitheatre tiers, m = flat base slab under the tiers, q = hedge semi-wall (all solid)
+const SOLID_TILES = '#RLlAfdDvEFB~MGKCTWHYZJQaoVc12345678qmkejw';   // H = hedge, Y = bush mound, Z = tree, J = gym door, Q = gym poster wall, c = pillar, 1-6 = amphitheatre tiers, m = flat base slab under the tiers, q = hedge semi-wall (all solid)
 export const isSolid = (tx, ty) => { const c = getTile(tx, ty); return c === '~' ? !swim.on : SOLID_TILES.includes(c); };
 
 // Exit info for a tile of the current zone (or null)

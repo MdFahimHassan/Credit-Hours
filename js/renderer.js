@@ -238,7 +238,8 @@ function drawPlanter(px, py, tx, ty) {
 // Rails in the middle of a zone get the same slats without the parapet.
 const RC = { slat: '#5a646d', lit: '#8e99a3', dark: '#3b434a', bar: '#a9b2ba', barShade: '#6f7881', post: '#c3c8cb',
              para: '#a8a69d', cap: '#cdcbc2', seam: 'rgba(40,36,30,0.28)', stain: 'rgba(30,26,20,0.22)' };
-const isRail = (x, y) => getTile(x, y) === 'R';
+const isRail = (x, y) => getTile(x, y) === 'R' || (zoneId === 'zone1' && y === rows - 1 && x < 0 && x >= RUN_ON_TILES.from);   // (zone 1: the south rail runs on past the west edge, see drawRunOnRail)
+const RUN_ON_TILES = { from: -16 };   // zone 1: how many tiles the south rail carries on beyond the west edge (along the path to zone 2)
 
 // One 32px piece of rail in a LOCAL frame: x runs along the rail (0-32), y runs from the outer edge (0) inwards.
 function railPiece(idx, hasPrev, hasNext, slatH, paraH, parapet, seed) {
@@ -265,6 +266,16 @@ function railPiece(idx, hasPrev, hasNext, slatH, paraH, parapet, seed) {
 }
 function inFrame(m, fn) { ctx.save(); ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]); fn(); ctx.restore(); }
 
+// zone 1: the south balcony rail carries on to the left past the map edge (beside the open path to zone 2), drawn exactly like the other edge rails,
+// over the skyline, so the slats are see-through.
+function drawRunOnRail(x0) {
+  if (zoneId !== 'zone1') return;
+  for (let tx = Math.max(RUN_ON_TILES.from, x0); tx < 0; tx++) {
+    const px = tx * TILE, py = (rows - 1) * TILE;
+    inFrame([1, 0, 0, -1, px, py + TILE], () => railPiece(tx, isRail(tx - 1, rows - 1), true, 16, 8, true, tx * 7 + rows - 1));
+  }
+}
+
 function drawRail(px, py, tx, ty) {
   if (tx === 0 && ty === 0 && roundedCorners.some((c) => c.corner === 'nw')) return;   // the rounded north-west corner: drawn by drawCurvedRails()
   if (inCurvedRail(tx, ty)) return;                                    // part of a curved rail: drawn as one piece by drawCurvedRails()
@@ -272,7 +283,7 @@ function drawRail(px, py, tx, ty) {
   const edges = [];
   if (ty === 0) edges.push('n');
   if (ty === rows - 1 && !(zoneId === 'zone3' && tx === cols - 1)) edges.push('s');   // (zone 3: the south-east corner tile is part of the east rail only)
-  if (tx === 0) edges.push('w');
+  if (tx === 0 && !(zoneId === 'zone1' && ty === rows - 1)) edges.push('w');   // (zone 1: the south rail runs on along the path to zone 2 - no west piece in the corner)
   if (tx === cols - 1 && !(zoneId === 'zone2' && ty === 0)) edges.push('e');   // (zone 2: the north-east corner tile is part of the north rail only)
   if (edges.length) {                                                  // on the edge of the zone: parapet + slats, outer side
     for (const s of edges) {
@@ -533,6 +544,23 @@ function drawBin(ch, px, py) {
   if (ch === 'a') { R(13, 16, 1, 1, c.label); R(18, 18, 1, 1, c.label); R(16, 14, 1, 1, c.label); }           // little gaps in the ring = recycling arrows
 }
 
+
+// ---- street dustbin (V): the blue two-part plastic bin from the photo: a tall blue body with a teal-green strip down its left side, a dark hinged lid with a lighter
+// front lip, a white label and a dark foot. One tile.
+function drawStreetBin(px, py) {
+  const R = (x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(px + x, py + y, w, h); };
+  ctx.fillStyle = 'rgba(0,0,0,0.30)'; ctx.beginPath(); ctx.ellipse(px + 17, py + 28, 12, 3.2, 0, 0, Math.PI * 2); ctx.fill();   // floor shadow
+  R(8, 26, 17, 2, '#1d2024');                                                  // dark foot
+  for (let y = 11; y <= 25; y++) {                                              // body: lit on the left, shaded on the right, a hint of taper
+    const t = y > 18 ? 1 : 0, x0 = 8 + t, x1 = 25 - t;
+    R(x0, y, x1 - x0, 1, '#2a67ae'); R(x0, y, 3, 1, '#2e9a8c'); R(x0 + 3, y, 1, 1, '#1d6e88'); R(x1 - 3, y, 3, 1, '#1f4f89');
+  }
+  R(10, 12, 1, 12, '#5fc6b4');                                                  // light catching the teal strip
+  R(15, 15, 2, 6, '#cfe4f2'); R(15, 22, 2, 1, '#cfe4f2'); R(19, 15, 1, 4, '#cfe4f2'); R(19, 20, 2, 3, '#a9cde6');   // white label marks
+  R(7, 9, 20, 3, '#2b2f36'); R(7, 9, 20, 1, '#4b505a');                         // dark lid rim
+  R(8, 4, 18, 6, '#3a3f48'); R(8, 4, 18, 1, '#6a707b'); R(8, 4, 3, 6, '#4b515c'); R(23, 4, 3, 6, '#2b2f36');   // lid
+  R(13, 6, 8, 2, '#23262c');                                                    // handle recess
+}
 
 // ---- amphitheatre tiers (A) + railed stair flights (S, zone 1) ---------------------------------------------------------
 // Zone 1's upper section copies the real rooftop: two stair flights (each with a silver handrail down the middle) with wide,
@@ -940,7 +968,7 @@ function drawBlockBack(camera, B) {
 }
 
 // Tiles that stand on the grey stone paving (see floor.js). Everything else keeps its flat colour from COLORS.
-const STONE_FLOOR = '.pXURCTaoc12345678m';
+const STONE_FLOOR = '.pXURCTaoc12345678mV';
 function drawTile(ch, px, py, tx, ty, time) {
   if (STONE_FLOOR.includes(ch)) {
     ctx.drawImage(getFloor(zoneId, cols, rows), px, py, TILE, TILE, px, py, TILE, TILE);   // 32x32 piece of the pre-painted stone floor
@@ -998,6 +1026,8 @@ function drawTile(ch, px, py, tx, ty, time) {
     drawPillar(px, py, tx, ty);
   } else if (ch === 'a' || ch === 'o') {              // recycling bins (blue / red)
     drawBin(ch, px, py);
+  } else if (ch === 'V') {                            // street dustbin (blue plastic, dark lid)
+    drawStreetBin(px, py);
   } else if (ch === 'C') {                            // concrete bench
     drawBench(px, py, tx, ty);
   } else if (ch === 'T') {                            // tree in a grey planter box
@@ -1436,6 +1466,7 @@ export function render(game, time) {
   for (let ty = y0; ty <= y1; ty++)
     for (let tx = x0; tx <= x1; tx++)
       drawTile(getTile(tx, ty), tx * TILE, ty * TILE, tx, ty, time);
+  drawRunOnRail(Math.floor(camera.x / TILE));
   drawCurvedRails(time);                             // zone 3: the curved west rail (+ the skyline outside it)
   for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) if (getTile(tx, ty) === 'T') drawCrown(ctx, tx * TILE + 16, ty * TILE + 15, tx, ty, 19);   // the sitting-area trees: crowns drawn over their planters
   if (zoneId === 'zone2') drawPool(ctx, time);       // the Robotics Lab test pool: water, robots, ripples

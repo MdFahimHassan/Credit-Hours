@@ -3,6 +3,7 @@
 //
 // Tiles shared by all zones:
 //   #  wall (solid)        R  railing (solid)      .  open floor (grey stone paving, see floor.js)
+//   V  street dustbin, blue plastic (solid) - zone 1: x36, rows 7 and 22, in the corners beside the east hedge bed
 //   a  blue recycling bin (solid)   o  red non-recyclable bin (solid)  - zone 1, side by side above the left end of the escalator rail
 //   c  steel-blue pillar on a concrete plinth (solid) - zone 1: two rows (9 and 21), 6 tiles above / below the escalator
 //   p  old "path" tile (walkable). Zone 1 no longer uses it; in other zones it now just looks like the stone floor
@@ -81,7 +82,7 @@ export const ZONES = {
     "#.qHYZ432SS22SS234HHYq.....HHHH..CTC.R",
     "e.qYHH321......123YHHq.....YHHH..CCC.R",
     "e.qqqqmmm......mmmqqqq...............R",
-    "#....................................R",
+    "#...................................VR",
     "#............................HHYHYYHZ#",
     "#..c...c...c...c...c.WWWWWW.cYZHZHYHH#",
     "X....................WWWWWW..YHHHYHYH#",
@@ -96,7 +97,7 @@ export const ZONES = {
     "X....................WWWWWW..ZYYYHYZH#",
     "X....................WWWWWW..HYHHHHHY#",
     "#..c...c...c...c...c........cHHHYYHYH#",
-    "#.............I......................R",
+    "#.............I.....................VR",
     "#....................................R",
     "Jr.HHYYHHYHYHZYHYYHHZHHYHZY..HH..CCC.R",
     "Qr.HHHHHHHZHHYYHHYHYHHZHYYY..HH..CTC.R",

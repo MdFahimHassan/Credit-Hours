@@ -42,6 +42,7 @@ const REVEAL_SPEED = 5;       // how quickly the camera slides (higher = snappie
 import { TILE, getTile, getExit, zoneId, cols, rows, widthPx, heightPx, curvedRails } from './map.js';
 import { railPath, faceX, mirrorX, RAIL_W } from './curverail.js';
 import { vineStrands, drawVines, drawVineLip } from './foliage.js';
+import { paintDoorFront } from './glassdoor.js';
 
 const SIDES = ['n', 'e', 's', 'w'];
 const FACE = { n: 'up', e: 'right', s: 'down', w: 'left' };
@@ -77,7 +78,16 @@ const EXT = 480;                // how far (px) the skyline carries on past the 
 const STAIRS_DARK = ['zone1'];
 // PATH_RAILS: which sides of an open path carry a railing, [first side, last side] (u0 side, u1 side); default both.
 //   zone 3 south: the 1-tile entry path from zone 1 is just a path between two plain walls.  zone 3 west: the path to zone 2 has a rail on its north side only (the south side is the wall)
-const PATH_RAILS = { zone3: { s: [false, false], w: [true, false] } };
+const PATH_RAILS = { zone1: { w: [false, false] }, zone3: { s: [false, false], w: [true, false] } };
+// PATH_CONT: the edge rail of the zone carries on, unfaded, along the south side of the open path that sits right beside it (zone 1 west: the south rail of the bay runs on
+//   to the far end of the path to zone 2). The north side of that path is a plain wall.
+// PATH_RAIL_FRONT: the rail on one side of an open path is drawn IN FRONT of the skyline window beside it (it would otherwise be hidden by the window's picture).
+//   key = first tile of the path group; wall 0 = the u0 side, 1 = the u1 side. (zone 1 north: the path at x31-32 runs between the hedge bed and the north-east skyline window; its right rail goes up the window's edge)
+const PATH_RAIL_FRONT = { zone1: { n: { 31: { wall: 1 } } } };
+const PATH_CONT = { zone1: { w: true } };   // (the rail itself is drawn by renderer.js drawRunOnRail, over the skyline, so it looks exactly like the balcony rails; here the path floor just reaches its parapet)
+// PATH_DOORS: glass room doors (the ones on zone 1's west wall) in the plain wall beside an open path. key = first row of the path group; wall 0 = the u0 (north) side, 1 = the u1 (south) side;
+//   doors = [[ch, d], ...]: ch = 'j' (3 panes) or 'e' (2 panes); d = distance (px) from the edge of the map to the start of the 64px door (one plain tile of wall, 32px, between two doors).
+const PATH_DOORS = { zone1: { w: { 28: { wall: 0, doors: [['j', 40], ['e', 136]] }, 19: { wall: 1, doors: [['e', 40], ['j', 136]] }, 10: { wall: 0, doors: [['j', 40], ['e', 136]] } } } };
 // WINDOW_TRIM: px cut off the END of the last skyline window of a side, so the rail of the open path that follows it (see PATH_RAILS) is not painted over by the picture
 const WINDOW_TRIM = { zone3: { w: { b: 47, px: 24 } } };   // (the window whose last tile row is b)
 // SHARE: this side's skyline window does not paint its own picture, it shows the picture of another side (in THAT side's direction, so
@@ -138,6 +148,30 @@ function features() {
 // (a rail tile row is 1 tile deep, the exit tiles themselves are right on the edge)
 // how far (px) the west rail's face stands in from the edge at height y (curved rails, see CURVED RAILS)
 const curvedFace = (y, side = 'w') => Math.max(0, ...curvedRails.filter((c) => c.side === side).map((c) => faceX(c, y)));
+// distance (px) from the player's hitbox to the nearest point of the INNER face of any curved rail (bay) on this side, in every direction - so the fog clears
+// when you walk up to the north / south walls of a bay just as it does when you walk up to the straight edge from the east (curverail.js)
+const curveCache = new Map();
+function curveFacePts(c) {
+  const key = c.y0 + ',' + c.y1 + ',' + c.depth + ',' + c.r + ',' + c.side + ',' + c.closed + ',' + c.ret + ',' + c.tail + ',' + c.W;
+  let pts = curveCache.get(key);
+  if (!pts) {
+    pts = railPath(c).pts.map((q) => { const x = q.x + q.ty * RAIL_W, y = q.y - q.tx * RAIL_W; return { x: c.side === 'e' ? c.W - x : x, y }; });
+    curveCache.set(key, pts);
+  }
+  return pts;
+}
+function curveDist(side, p) {
+  let best = Infinity;
+  for (const c of curvedRails) {
+    if (c.side !== side) continue;
+    for (const q of curveFacePts(c)) {
+      const dx = Math.max(p.x - q.x, 0, q.x - (p.x + p.w)), dy = Math.max(p.y - q.y, 0, q.y - (p.y + p.h));
+      const d = Math.hypot(dx, dy);
+      if (d < best) best = d;
+    }
+  }
+  return best;
+}
 function edgeDist(side, p, list, inset) {
   let perp, lc;
   if (side === 'e') { const f = curvedFace(p.cy, 'e'); perp = (f > 0 ? widthPx - f - RAIL_W : cols * TILE - inset) - (p.x + p.w); lc = p.cy; }
@@ -184,12 +218,13 @@ export const skyline = {
     for (const s of SIDES) {
       const F = f[s];
       const dw = F.rails.length ? edgeDist(s, p, F.rails, TILE) : Infinity;
+      const dFog = Math.min(dw, curveDist(s, p));            // fog + reveal: the distance to the rail in ANY direction (a bay's north / south walls count too)
       const dp = F.exitsView.length ? edgeDist(s, p, F.exitsView, 0) : Infinity;
-      let tw = clamp01(1 - dw / NEAR);
+      let tw = clamp01(1 - dFog / NEAR);
       if (this.leaning && s === this.leanSide) tw = 1;
       this.close[s] += (tw - this.close[s]) * Math.min(1, dt * 4);
       this.pclose[s] += (clamp01(1 - dp / NEAR) - this.pclose[s]) * Math.min(1, dt * 4);
-      if (Math.min(dw, dp) < NEAR * 2) layers(s);
+      if (Math.min(dFog, dp) < NEAR * 2) layers(s);
       if (dw <= 10 && dw < best) { best = dw; this.touch = s; }
     }
     this.lean += ((this.leaning ? 1 : 0) - this.lean) * Math.min(1, dt * 6);
@@ -329,7 +364,10 @@ function paintExit(g, grp, side) {
   const u0 = grp.a * TILE, u1 = (grp.b + 1) * TILE, w = u1 - u0;
   const stairsAny = grp.segs.some((s) => s.stairs), L = EXIT_VIEW[zoneId]?.[side] ?? (stairsAny ? STAIR_LEN : PATH_LEN);
   const [RA, RB] = stairsAny ? [24, 24] : (PATH_RAILS[zoneId]?.[side] ?? [true, true]).map((on) => (on ? 24 : 0));   // (a flat path may have plain walls beside it, no rails)
-  const x0 = u0 - RA, tw = w + RA + RB;
+  const cont = !!PATH_CONT[zoneId]?.[side] && grp.b === (side === 'n' || side === 's' ? cols : rows) - 2;   // the path ends one tile before the corner: the edge rail runs on beside it
+  const door = PATH_DOORS[zoneId]?.[side]?.[grp.a] ?? null, DP = door ? TILE : 0;                 // a door strip (one tile thick) beside the path
+  const padA = RA + (door && door.wall === 0 ? DP : 0), padB = RB + (door && door.wall === 1 ? DP : 0);
+  const x0 = u0 - padA, tw = w + padA + padB + (cont ? 8 : 0);
   const t = mkCanvas(tw, PH), h = t.getContext('2d');
   h.translate(-x0, 0);                                             // from here on x = u (same numbers as the side's own frame)
   // dark space around and behind the rails
@@ -339,7 +377,7 @@ function paintExit(g, grp, side) {
   // the floor: paving, and steps where the exit is a flight of stairs
   for (const seg of grp.segs) {
     const a = seg.a * TILE, wd = (seg.b - seg.a + 1) * TILE;
-    if (!seg.stairs) paintSlabs(h, a, 0, wd, Math.ceil(L / TILE) * TILE);
+    if (!seg.stairs) paintSlabs(h, a, 0, wd + (cont && seg === grp.segs[grp.segs.length - 1] ? 8 : 0), Math.ceil(L / TILE) * TILE);
     else {
       for (let k = 0; k * 16 < L; k++) {                           // a step = riser facing you (near side) + tread (far side)
         const d = k * 16;
@@ -365,6 +403,13 @@ function paintExit(g, grp, side) {
   // a railing on each side (parapet next to the path, slats outside)
   if (RA) railRun(h, [0, 1, 1, 0, u0 - RA, 0], L);
   if (RB) railRun(h, [0, 1, -1, 0, u1 + RB, 0], L);
+  if (door) {                                                      // the room door in the wall beside the path: front view, flat side towards the path
+    const m = door.wall === 0 ? [0, 1, 1, 0, u0 - TILE, 0] : [0, 1, -1, 0, u1 + TILE, 0];
+    h.save(); h.transform(...m);
+    h.fillStyle = '#d9d7d0'; h.fillRect(0, 0, PH, TILE); h.fillStyle = '#eceae4'; h.fillRect(0, 0, PH, 3); h.fillStyle = '#c2c0b8'; h.fillRect(0, 26, PH, 6);   // plain plaster wall along the whole strip
+    for (const [ch, d] of door.doors) { h.save(); h.translate(d, 0); paintDoorFront(h, ch); h.restore(); }
+    h.restore();
+  }
   // fade to black with distance, and a soft shadow at the start of the path
   const fg = h.createLinearGradient(0, 0, 0, PH);
   for (let i = 0; i <= 12; i++) {
@@ -821,7 +866,30 @@ function drawSide(g, side, time) {
       for (let d = 46; d < PH; d += 64) R(g, x, d, 9, 1, 'rgba(0,0,0,0.16)');
     }
   }
+  for (const grp of F.groups) {                                // rails that must stand in front of a window picture (PATH_RAIL_FRONT)
+    const cfg = PATH_RAIL_FRONT[zoneId]?.[side]?.[grp.a];
+    if (cfg) g.drawImage(railOverlay(grp, side, cfg.wall), cfg.wall ? (grp.b + 1) * TILE : grp.a * TILE - RAIL_W, 0);
+  }
   g.restore();
+}
+
+// one railing along the side of an open path, faded to black with distance exactly like the path itself (paintExit); cached
+const overlayCache = {};
+function railOverlay(grp, side, wall) {
+  const key = zoneId + side + grp.a + wall;
+  if (overlayCache[key]) return overlayCache[key];
+  const L = EXIT_VIEW[zoneId]?.[side] ?? PATH_LEN;
+  const c = mkCanvas(RAIL_W, PH), h = c.getContext('2d');
+  railRun(h, wall ? [0, 1, -1, 0, RAIL_W, 0] : [0, 1, 1, 0, 0, 0], L);
+  h.globalCompositeOperation = 'source-atop';
+  const fg = h.createLinearGradient(0, 0, 0, PH);
+  for (let i = 0; i <= 12; i++) {
+    const d = (i / 12) * L, a = Math.pow(clamp01((d - 12) / (L - 12)), 1.5) * 0.985;
+    fg.addColorStop(Math.min(1, d / PH), `rgba(0,0,0,${a.toFixed(3)})`);
+  }
+  fg.addColorStop(Math.min(1, L / PH), 'rgba(0,0,0,1)'); fg.addColorStop(1, 'rgba(0,0,0,1)');
+  h.fillStyle = fg; h.fillRect(0, 0, RAIL_W, PH);
+  return (overlayCache[key] = c);
 }
 
 // how clear the air is for a side: linked sides (one skyline round a corner) share it, so no fog seam shows between them
