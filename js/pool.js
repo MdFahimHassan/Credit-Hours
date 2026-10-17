@@ -51,7 +51,7 @@ export const POOL_PATHS = [
   { x0: 10, x1: 19, y0: 20, y1: 23 },
   { x0: 11, x1: 19, y0: 6,  y1: 9  },
 ];
-const CONCRETE = [93, 96, 102];                                      // average colour (#5d6066): darker than the stone slabs (about #8a8d94). Lower the numbers for darker.
+const CONCRETE = [121, 124, 130];                                    // average colour (#797c82): only a little darker than the stone slabs (about #868990), just without the grid. Lower the numbers for darker.
 function hsh(a, b, c = 0) {
   let n = Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 1274126177);
   n = Math.imul(n ^ (n >>> 13), 1103515245); n ^= n >>> 16;
@@ -77,8 +77,8 @@ function paintConcrete(P) {
     const r = hsh(wx, wy, 15);
     if (r > 0.993) v -= 20; else if (r < 0.004) v += 15;                               // little pits and pale grains of aggregate
     v += 3.5 * Math.exp(-Math.pow((y - H / 2) / (H * 0.22), 2));                       // worn, slightly paler line along the middle
-    const e = Math.min(y, H - 1 - y); if (e < 14) v -= (14 - e) * 0.45;                // dirtier along both long edges
-    v -= Math.max(0, vnoise(wx * 0.55, wy, 40, 16) - 0.62) * 22;                       // faint damp / stained patches
+    const e = Math.min(y, H - 1 - y); if (e < 14) v -= (14 - e) * 0.25;                // dirtier along both long edges
+    v -= Math.max(0, vnoise(wx * 0.55, wy, 40, 16) - 0.62) * 12;                       // faint damp / stained patches
     d[i] = CONCRETE[0] + v; d[i + 1] = CONCRETE[1] + v; d[i + 2] = CONCRETE[2] + v * 1.05; d[i + 3] = 255;
   }
   g.putImageData(img, 0, 0);
@@ -86,7 +86,7 @@ function paintConcrete(P) {
   const crack = (x, y, n, dir, a) => {                                                 // a thin meandering hairline crack (+ a faint pale edge below it)
     const pts = [[x, y]];
     for (let k = 0; k < n; k++) { x += dir * (3 + hsh(x | 0, y | 0, k + ox) * 6); y += (hsh(y | 0, x | 0, k + 5) - 0.5) * 6; pts.push([x, y]); }
-    g.strokeStyle = `rgba(28,30,34,${a})`; g.beginPath(); pts.forEach(([px, py], k) => (k ? g.lineTo(px, py) : g.moveTo(px, py))); g.stroke();
+    g.strokeStyle = `rgba(40,42,46,${a * 0.6})`; g.beginPath(); pts.forEach(([px, py], k) => (k ? g.lineTo(px, py) : g.moveTo(px, py))); g.stroke();
     g.strokeStyle = `rgba(150,154,160,${a * 0.35})`; g.beginPath(); pts.forEach(([px, py], k) => (k ? g.lineTo(px, py + 1) : g.moveTo(px, py + 1))); g.stroke();
   };
   crack(W * 0.18, H * 0.30, 11, 1, 0.30); crack(W * 0.52, H * 0.72, 14, -1, 0.26); crack(W * 0.74, H * 0.22, 9, 1, 0.24); crack(W * 0.86, H * 0.64, 6, -1, 0.22);

@@ -334,7 +334,12 @@ export function drawVines(g, strands, time) {
     sg.addColorStop(0, 'rgba(20,32,18,0.42)'); sg.addColorStop(1, 'rgba(20,32,18,0)');
     g.fillStyle = sg; g.fillRect(u0, 0, u1 - u0, 22);
   }
-  for (const s of strands) {
+  for (const s of strands) drawStrand(g, s, time);
+}
+
+// one hanging strand in the local frame of an edge (u along the edge, d away from it)
+export function drawStrand(g, s, time) {
+  if (s.d0) { g.save(); g.translate(0, s.d0); drawStrand(g, { ...s, d0: 0 }, time); g.restore(); return; }   // d0 < 0: the strand starts inside the rail (behind the slats) and hangs out of it
     // gravity first: the strand drops straight down; wind adds a small, slow sideways drift that grows towards the free end
     const sway = (d) => { const t = Math.pow(d / s.len, 1.4); return (Math.sin(time * 0.9 + s.ph + d * 0.06) * s.amp * VINE_SWAY + Math.sin(time * 0.37 + s.u * 0.02) * 0.5 * VINE_SWAY) * t + s.lean * t; };
     g.lineJoin = 'round'; g.lineCap = 'round';
@@ -356,12 +361,84 @@ export function drawVines(g, strands, time) {
     const tx = s.u + sway(s.len);                                                      // the tip: a small bunch of leaves
     ivyLeaf(g, tx - 1.5, s.len, s.sz * 0.9, 0.5, '#2b7330', null); ivyLeaf(g, tx + 1.5, s.len + 1, s.sz * 0.9, -0.5, '#2f7a35', null);
     if (s.big) pointLeaf(g, tx, s.len, s.sz * 2.4, s.sz * 0.85, Math.PI / 2 + Math.sin(time * 0.9 + s.ph) * 0.07, '#35853d', '#7fc384');   // a bigger leaf hanging straight down
-  }
 }
 
 export function drawVineLip(g, strands) {                       // call AFTER drawVines so the lip covers where the strands start
   for (const l of strands.lip ?? []) {
     g.fillStyle = 'rgba(0,0,0,0.22)'; g.beginPath(); g.ellipse(l.u + 1, l.d + 2, l.s, l.s * 0.75, 0, 0, Math.PI * 2); g.fill();
     ivyLeaf(g, l.u, l.d, l.s, l.rot, l.col, l.hi ? '#a6dca8' : null);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// 4. a few vines hanging from the balcony rails (every rail with the skyline beyond it)
+// A sparse trailing strand here and there, short, hanging straight down the face of the building and swaying a little in the wind - NOT a curtain
+// (that is the hedge bed's job, VINE_EDGES above). Straight edges: railVineStrands (same local frame as vineStrands, drawn by skyline.js drawWindows).
+// Curved bays (zone 3): railCurveVines (drawn in world space along the curve by skyline.js drawCurvedBays).
+// ---------------------------------------------------------------------------------------------
+const RAIL_VINE_CHANCE = 0.38;   // (*) chance that a rail tile has some vines
+const RAIL_VINE_MAX = 32;        // (*) px: how far the longest strand hangs past the rail
+const RAIL_VINE_ROOT = -12;      // strands start this far INSIDE the rail (behind the slats) so they grow out of it
+function railStrand(u, len, h) {
+  return { u, d0: RAIL_VINE_ROOT, len: len - RAIL_VINE_ROOT, ph: h(2) * 6.28, amp: 0.5 + h(3) * 0.9, thick: 1 + h(4) * 0.5, gap: 4.2 + h(5) * 2, sz: 2.4 + h(6) * 1.1, lean: (h(7) - 0.5) * 1.2, big: h(8) < 0.18 };
+}
+// a group of vines at position u: kind 'single' | 'few' (2-3) | 'clump' (a dense bunch of 6-9 strands of mixed length). h(i) = deterministic random 0..1
+function railGroup(u, kind, h, uMax) {
+  const n = kind === 'single' ? 1 : kind === 'few' ? 2 + Math.floor(h(10) * 2) : 6 + Math.floor(h(10) * 4), out = [];
+  const spread = kind === 'clump' ? 3.2 : 4.5;
+  for (let k = 0; k < n; k++) {
+    const hk = (j) => h(20 + k * 11 + j);
+    const len = kind === 'clump' ? 7 + hk(1) * (RAIL_VINE_MAX - 7) : 8 + hk(1) * (RAIL_VINE_MAX - 8) * 0.85;
+    out.push(railStrand(Math.min(uMax, u + k * spread * (0.7 + hk(2) * 0.6)), len, hk));
+  }
+  return out;
+}
+const kindOf = (r) => (r < 0.5 ? 'single' : r < 0.78 ? 'few' : 'clump');   // about half single vines, the rest small groups and now and then a thick bunch
+const railVineCache = {};
+export function railVineStrands(zoneId, side, rails) {
+  const key = zoneId + '|' + side + '|' + rails.join(',');
+  if (railVineCache[key]) return railVineCache[key];
+  const skip = (VINE_EDGES[zoneId]?.[side] ?? []), sc = side.charCodeAt(0), out = [], lip = [];
+  for (const i of rails) {
+    if (skip.some(([a, b]) => i >= a && i <= b)) continue;       // the hedge bed already has its own vines there
+    if (hash(i, sc, 5100) >= RAIL_VINE_CHANCE) continue;
+    const kind = kindOf(hash(i, sc, 5101)), h = (j) => hash(i * 13 + j, sc, 5200), uMax = (i + 1) * TILE - 2;
+    const span = kind === 'clump' ? 24 : kind === 'few' ? 14 : 4;
+    const u0 = i * TILE + 3 + h(0) * Math.max(1, TILE - 6 - span);
+    out.push(...railGroup(u0, kind, h, uMax));
+    if (kind === 'clump') for (let x = u0 - 3; x < u0 + span + 4; x += 2.6 + h(31 + x) * 1.6)     // a little leafy fringe where the bunch grows out of the rail
+      lip.push({ u: x, d: -6 + h(40 + x) * 7, s: 2.8 + h(50 + x) * 2, rot: h(60 + x) * 6.28, col: pick(LEAF, h(70 + x)), hi: h(80 + x) < 0.2 });
+  }
+  out.span = []; out.lip = lip;
+  return (railVineCache[key] = out);
+}
+
+// strands along the outer face of a curved rail: [{ x, y, tx, ty, nx, ny, s }] in the WEST frame (mirrored for an east bay by the caller)
+const curveVineCache = new WeakMap();
+export function railCurveVines(c, pts) {
+  if (curveVineCache.has(c)) return curveVineCache.get(c);
+  const out = [], sc = c.side === 'e' ? 101 : 119;
+  let s = 22 + hash(c.y0, sc, 5300) * 30, id = 0;
+  for (let k = 1; k < pts.length - 1; k++) {
+    // walk the path by arc length (0.5px per point): one group every 40-110px, each only with some chance
+    if (k * 0.5 < s) continue;
+    s += 40 + hash(id, c.y0, 5301) * 70;
+    id++;
+    if (hash(id, c.y0 + sc, 5302) > 0.7) continue;
+    const kind = kindOf(hash(id, c.y0, 5303)), h = (j) => hash(id * 13 + j, sc, 5305);
+    for (const st of railGroup(0, kind, h, 1e9)) out.push({ q: pts[k], off: st.u, s: { ...st, u: 0 } });
+  }
+  curveVineCache.set(c, out);
+  return out;
+}
+export function drawCurveVines(g, c, pts, mirror, time) {
+  for (const { q, off, s } of railCurveVines(c, pts)) {
+    // local frame: u = along the rail (the path's tangent), d = outwards (-inward normal = (-ty, tx))
+    const m = mirror ? -1 : 1;
+    g.save();
+    g.transform(m * q.tx, q.ty, m * -q.ty, q.tx, mirror ? c.W - q.x : q.x, q.y);
+    g.translate(off, 0);
+    drawStrand(g, { ...s, ph: s.ph + (q.y * 0.01) }, time);
+    g.restore();
   }
 }

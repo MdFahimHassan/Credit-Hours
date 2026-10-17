@@ -41,7 +41,7 @@ const REVEAL_SPEED = 5;       // how quickly the camera slides (higher = snappie
 
 import { TILE, FOOT, groundDY, getTile, getExit, zoneId, cols, rows, widthPx, heightPx, curvedRails } from './map.js';
 import { railPath, faceX, mirrorX, RAIL_W } from './curverail.js';
-import { vineStrands, drawVines, drawVineLip } from './foliage.js';
+import { vineStrands, railVineStrands, drawCurveVines, drawVines, drawVineLip } from './foliage.js';
 import { paintDoorFront } from './glassdoor.js';
 
 const SIDES = ['n', 'e', 's', 'w'];
@@ -58,7 +58,7 @@ const EO = PH / Z;            // depth of the painting in its own (zoomed) units
 //   WALL_STYLE  'concrete' (default) or 'terrace' (the wall of the level above, with planters and vines)
 // ---------------------------------------------------------------------------------------------
 const SKIP = { zone1: ['w'], zone2: [] };
-const SKIP_TILES = { zone2: { e: [0] }, zone3: { s: [73] } };   // (zone 3: the south-east corner tile (68, 51) is part of the EAST rail only, so the east skyline runs on round the corner without a little south window)   // zone 2: the north rails (x 9-29, along the corridor) show the skyline; the corner rail tile (0,0) belongs to the west skyline only
+const SKIP_TILES = { zone2: { e: [0, 29] }, zone3: { s: [73] } };   // (zone 3: the south-east corner tile (68, 51) is part of the EAST rail only, so the east skyline runs on round the corner without a little south window)   // zone 2: the north rails (x 9-29, along the corridor) show the skyline; the corner rail tile (0,0) belongs to the west skyline only
 const WINDOW_FILL = { zone1: { e: [[8, 21]] }, zone2: { w: [[8, 21]] } };   // zone 2: the wall behind the west hedge bed
 // CURVED RAILS (curverail.js, `curvedRails` in zones.js): the west rail steps in towards the floor for a stretch and back out in smooth bends (zone 3, beside the hole).
 //   The window along the edge stays ONE straight picture (the x0 rail tiles are all rails). Where the rail has stepped in, the picture simply carries on to the
@@ -71,6 +71,7 @@ const wallStyle = (zid, side) => WALL_STYLE[zid]?.[side] ?? 'concrete';
 //   zone 1: the east skyline runs on up past the top-right corner, the south skyline runs on left past the bottom-left corner.
 //   It also carries on past the END of the edge, so the bottom-right corner (east + south) can turn smoothly (see drawCorner).
 const EXTEND = { zone1: { e: true, s: true }, zone2: { n: true, w: true, s: true }, zone3: { n: true, w: true, e: true } };   // zone 2: the west skyline runs the full height and on past the top corner; west + south meet in a turning corner (CORNER)
+const EXTEND_S_END = ['zone2'];   // zones whose SOUTH skyline also runs on past the south-east corner (beside the path that leaves there)
 const EXTEND_END_E = ['zone3'];   // zones whose east skyline runs on past the END of the edge (the south-east corner is skyline, not a drawCorner square)
 const EXT = 480;                // how far (px) the skyline carries on past the corner (the camera can never show more than PH = 320)
 // STAIRS_DARK: flights of stairs on these zones do NOT show steps / rails / extra view beyond the edge: the stairs lead straight
@@ -78,13 +79,16 @@ const EXT = 480;                // how far (px) the skyline carries on past the 
 const STAIRS_DARK = ['zone1'];
 // PATH_RAILS: which sides of an open path carry a railing, [first side, last side] (u0 side, u1 side); default both.
 //   zone 3 south: the 1-tile entry path from zone 1 is just a path between two plain walls.  zone 3 west: the path to zone 2 has a rail on its north side only (the south side is the wall)
-const PATH_RAILS = { zone1: { w: [false, false] }, zone3: { s: [false, false], w: [true, false] } };
-// PATH_CONT: the edge rail of the zone carries on, unfaded, along the south side of the open path that sits right beside it (zone 1 west: the south rail of the bay runs on
-//   to the far end of the path to zone 2). The north side of that path is a plain wall.
+//   a side may also be an object keyed by the FIRST TILE of each path (the row / column of its first exit tile): { 10: [false, false], 28: [false, true] }; paths not listed keep both rails.
+//   zone 2 east: the two lift paths (rows 10-11, 19-20) are plain walls both sides; the north corridor (rows 1-2) and the south path (row 28) have no path rail of their own: the bay rail carries on beside them (RUN_ON).
+const pathRails = (side, grp) => { const c = PATH_RAILS[zoneId]?.[side]; return (Array.isArray(c) ? c : c?.[grp.a]) ?? [true, true]; };
+const PATH_RAILS = { zone1: { w: [false, false] }, zone2: { e: { 10: [false, false], 19: [false, false], 1: [false, false], 28: [false, false] } }, zone3: { s: [false, false], w: [true, false] } };
+// PATH_CONT / RUN_ON: the edge rail of the zone carries on along one side of the open path that sits right beside it (zone 1 west: the south rail of the bay runs on past the corner;
+//   zone 2 east: the north and the south rail run on beside the corridor / the south path). RUN_ON is drawn by renderer.js drawRunOnRail (see runOnRails below).
 // PATH_RAIL_FRONT: the rail on one side of an open path is drawn IN FRONT of the skyline window beside it (it would otherwise be hidden by the window's picture).
 //   key = first tile of the path group; wall 0 = the u0 side, 1 = the u1 side. (zone 1 north: the path at x31-32 runs between the hedge bed and the north-east skyline window; its right rail goes up the window's edge)
 const PATH_RAIL_FRONT = { zone1: { n: { 31: { wall: 1 } } } };
-const PATH_CONT = { zone1: { w: true } };   // (the rail itself is drawn by renderer.js drawRunOnRail, over the skyline, so it looks exactly like the balcony rails; here the path floor just reaches its parapet)
+const PATH_CONT = { zone1: { w: { 28: 1 } }, zone2: { e: { 1: 0, 28: 1 } } };   // key = first tile of the path; value = which side (0 = u0, 1 = u1) has the carried-on rail beside it, so its floor reaches 8px further to meet the rail's parapet
 // PATH_DOORS: glass room doors (the ones on zone 1's west wall) in the plain wall beside an open path. key = first row of the path group; wall 0 = the u0 (north) side, 1 = the u1 (south) side;
 //   doors = [[ch, d], ...]: ch = 'j' (3 panes) or 'e' (2 panes); d = distance (px) from the edge of the map to the start of the 64px door (one plain tile of wall, 32px, between two doors).
 const PATH_DOORS = { zone1: { w: { 28: { wall: 0, doors: [['j', 40], ['e', 136]] }, 19: { wall: 1, doors: [['e', 40], ['j', 136]] }, 10: { wall: 0, doors: [['j', 40], ['e', 136]] } } } };
@@ -142,6 +146,14 @@ function features() {
                 dneg: Math.max(Object.values(SHARE[zoneId] ?? {}).includes(s) ? DNEG : 0, bayDepthPx(s)), share: SHARE[zoneId]?.[s] ?? null };
   }
   return feat;
+}
+
+// RUN_ON: stretches of rail drawn BEYOND the map, carrying a bay's edge rail on along a path (renderer.js draws them like the real rail tiles):
+//   [{ edge, ty, a, b }] = tiles a..b (tile x, may lie outside the map) on row ty, hung on that edge ('n' / 's')
+export function runOnRails() {
+  if (zoneId === 'zone1') return [{ edge: 's', ty: rows - 1, a: -16, b: -1 }];
+  if (zoneId === 'zone2') return [{ edge: 'n', ty: 0, a: cols, b: cols + 15 }, { edge: 's', ty: rows - 1, a: cols, b: cols + 15 }];
+  return [];
 }
 
 // distance (px) from the player's hitbox to the nearest tile of a list along one edge. `inset` = how deep the tile row is
@@ -367,11 +379,11 @@ function paintExit(g, grp, side) {
   if (STAIRS_DARK.includes(zoneId) && grp.segs.every((s) => s.stairs)) return;   // nothing beyond the top of a dark flight (zone 1: renderer.js paints the lawn there)
   const u0 = grp.a * TILE, u1 = (grp.b + 1) * TILE, w = u1 - u0;
   const stairsAny = grp.segs.some((s) => s.stairs), L = EXIT_VIEW[zoneId]?.[side] ?? (stairsAny ? STAIR_LEN : PATH_LEN);
-  const [RA, RB] = stairsAny ? [24, 24] : (PATH_RAILS[zoneId]?.[side] ?? [true, true]).map((on) => (on ? 24 : 0));   // (a flat path may have plain walls beside it, no rails)
-  const cont = !!PATH_CONT[zoneId]?.[side] && grp.b === (side === 'n' || side === 's' ? cols : rows) - 2;   // the path ends one tile before the corner: the edge rail runs on beside it
+  const [RA, RB] = stairsAny ? [24, 24] : (pathRails(side, grp)).map((on) => (on ? 24 : 0));   // (a flat path may have plain walls beside it, no rails)
+  const cs = PATH_CONT[zoneId]?.[side]?.[grp.a], contA = cs === 0, contB = cs === 1;     // the path floor reaches 8px towards a carried-on rail (its parapet stands there)
   const door = PATH_DOORS[zoneId]?.[side]?.[grp.a] ?? null, DP = door ? TILE : 0;                 // a door strip (one tile thick) beside the path
-  const padA = RA + (door && door.wall === 0 ? DP : 0), padB = RB + (door && door.wall === 1 ? DP : 0);
-  const x0 = u0 - padA, tw = w + padA + padB + (cont ? 8 : 0);
+  const padA = RA + (door && door.wall === 0 ? DP : 0) + (contA ? 8 : 0), padB = RB + (door && door.wall === 1 ? DP : 0) + (contB ? 8 : 0);
+  const x0 = u0 - padA, tw = w + padA + padB;
   const t = mkCanvas(tw, PH), h = t.getContext('2d');
   h.translate(-x0, 0);                                             // from here on x = u (same numbers as the side's own frame)
   // dark space around and behind the rails
@@ -381,7 +393,8 @@ function paintExit(g, grp, side) {
   // the floor: paving, and steps where the exit is a flight of stairs
   for (const seg of grp.segs) {
     const a = seg.a * TILE, wd = (seg.b - seg.a + 1) * TILE;
-    if (!seg.stairs) paintSlabs(h, a, 0, wd + (cont && seg === grp.segs[grp.segs.length - 1] ? 8 : 0), Math.ceil(L / TILE) * TILE);
+    const eA = contA && seg === grp.segs[0] ? 8 : 0, eB = contB && seg === grp.segs[grp.segs.length - 1] ? 8 : 0;
+    if (!seg.stairs) paintSlabs(h, a - eA, 0, wd + eA + eB, Math.ceil(L / TILE) * TILE);
     else {
       for (let k = 0; k * 16 < L; k++) {                           // a step = riser facing you (near side) + tread (far side)
         const d = k * 16;
@@ -802,6 +815,11 @@ export function drawSkyline(ctx, camera, VW, VH, time) {
     for (const s of SIDES) if (skyline.over[s] >= 0.5) drawSide(ctx, s, time);
     drawCorner(ctx, time);
     drawNorthCorners(ctx, time);
+    for (const r of runOnRails()) {                                 // the dark drop behind the slats of the carried-on rails (it would be hidden by the side pictures drawn above)
+      const x = r.a * TILE, w = (r.b - r.a + 1) * TILE;
+      if (x > camera.x + VW || x + w < camera.x) continue;
+      if (r.edge === 'n') lip(x, 0, w, LIP, 0, LIP, 0, 0); else lip(x, H - LIP, w, LIP, 0, H - LIP, 0, H);
+    }
   }
 }
 
@@ -819,9 +837,12 @@ export function drawCurvedBays(g, camera, VW, VH, time, only = null) {
     g.beginPath(); pts.forEach((q, i) => (i ? g.lineTo(mirrorX(c, q.x), q.y) : g.moveTo(mirrorX(c, q.x), q.y)));
     if (c.tail > 0) g.lineTo(mirrorX(c, 0), c.y1);                   // a tail ends inside the map: close the area along the edge from there
     g.closePath(); g.clip();                                         // the face of the rail + the straight edge (x 0, or the east edge) it leaves and returns to
+    g.save();
     g.transform(...sideMatrix(side));
     g.imageSmoothingEnabled = false;
     drawPicture(g, side, L.pano, time);
+    g.restore();
+    drawCurveVines(g, c, pts, side === 'e', time);                   // a few vines hanging from the curved rail (still inside the clip)
     g.restore();
   }
 }
@@ -853,7 +874,7 @@ function drawSide(g, side, time) {
   }
   else if (side === 'w') g.rect(-over, -ext, over, H + (sw ? ext : 2 * ext));   // (ext = 0 where the west side has no extension: zone 1)
   else if (side === 'n') g.rect(0, -over, W + (NORTH_CORNERS[zoneId]?.includes('ne') ? 0 : ext), over);   // (ext: the north skyline also carries on past the north-east corner, above the exit path)
-  else g.rect(sw ? 0 : -ext, H, W + (sw ? 0 : ext) - (EXTEND_END_E.includes(zoneId) ? 5 * TILE + RAIL_W : 0), over);   // (zone 3: the south wall stops where the east bay's tail rail runs on past the south edge - 5 tiles + the rail in from the east edge: everything right of it is skyline, see drawCurvedBays)
+  else g.rect(sw ? 0 : -ext, H, W + (sw ? (EXTEND_S_END.includes(zoneId) ? ext : 0) : ext) - (EXTEND_END_E.includes(zoneId) ? 5 * TILE + RAIL_W : 0), over);   // (zone 3: the south wall stops where the east bay's tail rail runs on past the south edge - 5 tiles + the rail in from the east edge: everything right of it is skyline, see drawCurvedBays)
   g.clip();
   g.transform(...sideMatrix(side));
   g.imageSmoothingEnabled = false;
@@ -877,22 +898,13 @@ function drawSide(g, side, time) {
   g.restore();
 }
 
-// one railing along the side of an open path, faded to black with distance exactly like the path itself (paintExit); cached
+// one railing along the side of an open path, in front of the window picture, running the whole depth of the view (as far north / west / ... as you can see); cached
 const overlayCache = {};
 function railOverlay(grp, side, wall) {
   const key = zoneId + side + grp.a + wall;
   if (overlayCache[key]) return overlayCache[key];
-  const L = EXIT_VIEW[zoneId]?.[side] ?? PATH_LEN;
   const c = mkCanvas(RAIL_W, PH), h = c.getContext('2d');
-  railRun(h, wall ? [0, 1, -1, 0, RAIL_W, 0] : [0, 1, 1, 0, 0, 0], L);
-  h.globalCompositeOperation = 'source-atop';
-  const fg = h.createLinearGradient(0, 0, 0, PH);
-  for (let i = 0; i <= 12; i++) {
-    const d = (i / 12) * L, a = Math.pow(clamp01((d - 12) / (L - 12)), 1.5) * 0.985;
-    fg.addColorStop(Math.min(1, d / PH), `rgba(0,0,0,${a.toFixed(3)})`);
-  }
-  fg.addColorStop(Math.min(1, L / PH), 'rgba(0,0,0,1)'); fg.addColorStop(1, 'rgba(0,0,0,1)');
-  h.fillStyle = fg; h.fillRect(0, 0, RAIL_W, PH);
+  railRun(h, wall ? [0, 1, -1, 0, RAIL_W, 0] : [0, 1, 1, 0, 0, 0], PH);
   return (overlayCache[key] = c);
 }
 
@@ -923,6 +935,8 @@ function drawWindows(g, side, L, len, time) {
 
   const vines = vineStrands(zoneId, side);                     // hedge vines hanging over the edge (foliage.js VINE_EDGES): in front of the fog
   if (vines.length) { drawVines(g, vines, time); drawVineLip(g, vines); }
+  const rv = railVineStrands(zoneId, side, features()[side].rails);   // a few single vines hanging from the balcony rails (foliage.js section 4)
+  if (rv.length) { drawVines(g, rv, time); drawVineLip(g, rv); }
 }
 
 // The picture of one side (skyline, traffic, clouds, birds, fog) in that side's local frame: u along the edge, d away from it.

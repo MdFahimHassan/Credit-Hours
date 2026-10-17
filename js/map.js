@@ -129,7 +129,7 @@ export function railEdges(tx, ty) {                                  // which ed
   if (ty === 0) e.push('n');
   if (ty === rows - 1 && !(zoneId === 'zone3' && tx === cols - 1)) e.push('s');             // (zone 3: the south-east corner tile is part of the east rail only)
   if (tx === 0 && !(zoneId === 'zone1' && ty === rows - 1)) e.push('w');                    // (zone 1: the south rail runs on along the path to zone 2 - no west piece in the corner)
-  if (tx === cols - 1 && !(zoneId === 'zone2' && ty === 0)) e.push('e');                    // (zone 2: the north-east corner tile is part of the north rail only)
+  if (tx === cols - 1 && !(zoneId === 'zone2' && (ty === 0 || ty === rows - 1))) e.push('e');   // (zone 2: the north-east and south-east corner tiles are part of the north / south rail only)
   return e;
 }
 const isRailTile = (x, y) => getTile(x, y) === 'R';

@@ -11,7 +11,7 @@ import { drawWell, wellBox, wellTiles } from './escalator.js';
 import { drawCharacter } from './sprites.js';
 import { drawGlassFront, drawGlassTops } from './glass.js';
 import { drawStairwellInterior, drawStairwellRail } from './stairwell.js';
-import { skyline, drawSkyline, drawCurvedBays, drawCornerNotch } from './skyline.js';
+import { skyline, drawSkyline, drawCurvedBays, drawCornerNotch, runOnRails } from './skyline.js';
 import { setVirtualUp, UP_ROWS, WATER_FILTERS, railEdges } from './map.js';
 import { getFloor } from './floor.js';
 import { paintHedge, hedgeBase, buildOverlay } from './foliage.js';
@@ -239,8 +239,7 @@ function drawPlanter(px, py, tx, ty) {
 // Rails in the middle of a zone get the same slats without the parapet.
 const RC = { slat: '#5a646d', lit: '#8e99a3', dark: '#3b434a', bar: '#a9b2ba', barShade: '#6f7881', post: '#c3c8cb',
              para: '#a8a69d', cap: '#cdcbc2', seam: 'rgba(40,36,30,0.28)', stain: 'rgba(30,26,20,0.22)' };
-const isRail = (x, y) => getTile(x, y) === 'R' || (zoneId === 'zone1' && y === rows - 1 && x < 0 && x >= RUN_ON_TILES.from);   // (zone 1: the south rail runs on past the west edge, see drawRunOnRail)
-const RUN_ON_TILES = { from: -16 };   // zone 1: how many tiles the south rail carries on beyond the west edge (along the path to zone 2)
+const isRail = (x, y) => getTile(x, y) === 'R' || runOnRails().some((r) => r.ty === y && x >= r.a && x <= r.b);   // (zone 1: the south rail runs on past the west edge, see drawRunOnRail)
 
 // One 32px piece of rail in a LOCAL frame: x runs along the rail (0-32), y runs from the outer edge (0) inwards.
 function railPiece(idx, hasPrev, hasNext, slatH, paraH, parapet, seed) {
@@ -269,14 +268,14 @@ function inFrame(m, fn) { ctx.save(); ctx.transform(m[0], m[1], m[2], m[3], m[4]
 
 // zone 1: the south balcony rail carries on to the left past the map edge (beside the open path to zone 2), drawn exactly like the other edge rails,
 // over the skyline, so the slats are see-through.
-function drawRunOnRail(x0) {
-  if (zoneId !== 'zone1') return;
-  for (let tx = Math.max(RUN_ON_TILES.from, x0); tx < 0; tx++) {
-    const px = tx * TILE, py = (rows - 1) * TILE;
-    inFrame([1, 0, 0, -1, px, py + TILE], () => railPiece(tx, isRail(tx - 1, rows - 1), true, 16, 8, true, tx * 7 + rows - 1));
+function drawRunOnRail(camLeft, camRight) {
+  for (const run of runOnRails()) {
+    for (let tx = Math.max(run.a, Math.floor(camLeft / TILE) - 1); tx <= Math.min(run.b, Math.ceil(camRight / TILE)); tx++) {
+      const px = tx * TILE, py = run.ty * TILE, m = run.edge === 's' ? [1, 0, 0, -1, px, py + TILE] : [1, 0, 0, 1, px, py];
+      inFrame(m, () => railPiece(tx, isRail(tx - 1, run.ty), isRail(tx + 1, run.ty), 16, 8, true, tx * 7 + run.ty));
+    }
   }
 }
-
 function drawRail(px, py, tx, ty) {
   if (tx === 0 && ty === 0 && roundedCorners.some((c) => c.corner === 'nw')) return;   // the rounded north-west corner: drawn by drawCurvedRails()
   if (inCurvedRail(tx, ty)) return;                                    // part of a curved rail: drawn as one piece by drawCurvedRails()
@@ -1462,7 +1461,7 @@ export function render(game, time) {
   for (let ty = y0; ty <= y1; ty++)
     for (let tx = x0; tx <= x1; tx++)
       drawTile(getTile(tx, ty), tx * TILE, ty * TILE, tx, ty, time);
-  drawRunOnRail(Math.floor(camera.x / TILE));
+  drawRunOnRail(camera.x, camera.x + VW);
   drawCurvedRails(time);                             // zone 3: the curved west rail (+ the skyline outside it)
   for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) if (getTile(tx, ty) === 'T') drawCrown(ctx, tx * TILE + 16, ty * TILE + 15, tx, ty, 19);   // the sitting-area trees: crowns drawn over their planters
   if (zoneId === 'zone2') drawPool(ctx, time);       // the Robotics Lab test pool: water, robots, ripples
