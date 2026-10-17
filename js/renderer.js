@@ -673,7 +673,14 @@ const isSemi = (x, y) => getTile(x, y) === 'q';
 function drawSemiWall(px, py, tx, ty, base = false) {   // base = the 'm' slab at the foot of the tiers: same drawing, but no lit cap line on top
   const front = !isSemi(tx, ty + 1) && getTile(tx, ty + 1) !== '#', capTop = !base && !isSemi(tx, ty - 1) && ty > 0 && !isPlanted(tx, ty - 1);
   const body = TILE - (front ? 9 : 0), floorAt = (x, y) => tierLevel(x, y) === 0;
-  ctx.fillStyle = '#a6a49c'; ctx.fillRect(px, py, TILE, TILE);                                         // cap / top surface: same warm concrete as the stairs
+  const ledge = zoneId === 'zone3' && ty === 3 && tx >= 17 && tx <= 56;                                // zone 3: the lawn's north border seen from the north path = a weathered concrete ledge (real photo)
+  ctx.fillStyle = ledge ? '#9d9588' : '#a6a49c'; ctx.fillRect(px, py, TILE, TILE);                     // cap / top surface: same warm concrete as the stairs
+  if (ledge) {
+    for (let i = 0; i < 3; i++) { ctx.fillStyle = i % 2 ? 'rgba(60,45,30,0.10)' : 'rgba(255,255,255,0.07)'; ctx.fillRect(px + Math.floor(rnd(tx, ty, i + 40) * 22), py + 4 + Math.floor(rnd(tx, ty, i + 50) * 12), 5 + Math.floor(rnd(tx, ty, i + 60) * 6), 2 + Math.floor(rnd(tx, ty, i + 70) * 3)); }   // stains
+    ctx.fillStyle = '#bab2a4'; ctx.fillRect(px, py, TILE, 3);                                          // the lit lip of the slab towards the path
+    ctx.fillStyle = '#d2cabb'; ctx.fillRect(px, py, TILE, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(px, py + 3, TILE, 1);                             // the step edge
+  }
   ctx.fillStyle = 'rgba(0,0,0,0.08)'; ctx.fillRect(px + 10, py, 1, body); ctx.fillRect(px + 21, py, 1, body);   // board-formed seams (as on '#')
   ctx.fillStyle = 'rgba(255,255,255,0.10)'; ctx.fillRect(px + 11, py, 1, body); ctx.fillRect(px + 22, py, 1, body);
   for (let i = 0; i < 4; i++) { ctx.fillStyle = i % 2 ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.12)'; ctx.fillRect(px + 2 + Math.floor(rnd(tx, ty, i) * 28), py + 3 + Math.floor(rnd(tx, ty, i + 20) * Math.max(1, body - 6)), 2, 1); }   // speckle (as on the tiers)

@@ -192,14 +192,18 @@ export const ZONES = {
     spawn: { x: 10, y: 50 },
     rows: [
       "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
-      "R.....HHY..HHHHY.........................................................R",
-      "R.CCC.HHH..HHHYH.........................................................R",
-      "R.CTC.HHH..HHHHHqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq...............R",
-      "R.CTC.HHH..YHHHYqggggggggggggggggggggggggggggggggggggggggq...............R",
-      "R.CCC.YHH..HHZHHqggggggggggggggggggggggggggggggggggggggggq...............R",
-      "R.CTC.HHH..HYHHHqggggggggggggggggggggggggggggggggggggggggq...............R",
-      "R.CTC.HYH..YHHHHqggggggggggggggggggggggggggggggggggggggggq...............R",
-      "R.CCC...........qggggggggggggggggggggggggggggggggggggggggq...............R",
+      "R.....HHY..HHHHY.............................................HHHHHYHHHHHHR",
+      "R.CCC.HHH..HHHYH.............................................HYHHHHHHYHHHR",
+      "R.CTC.HHH..HHHHHqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq...HHHHYHHHHHHYR",
+      "R.CTC.HHH..YHHHYqggggggggggggggggggggggggggggggggggggggggq...YHHHHHHYHHHHR",
+      "R.CCC.YHH..HHZHHqggggggggggggggggggggggggggggggggggggggggq...HHHYHHH.....R",
+      "R.CTC.HHH..HYHHHqggggggggggggggggggggggggggggggggggggggggq...HHHHHHY.CCC.R",
+      "R.CTC.HYH..YHHHHqggggggggggggggggggggggggggggggggggggggggq...HHYHHHH.CTC.R",
+      "R.CCC...........qggggggggggggggggggggggggggggggggggggggggq...HHHHHYH.CTC.R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq...HYHHHHH.CCC.R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq...HHHHYHH.CTC.R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq...YHHHHHH.CTC.R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq...HHHYHHH.CCC.R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
@@ -211,17 +215,13 @@ export const ZONES = {
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
-      "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
-      "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
-      "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
-      "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
-      "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
-      "R......HHYHkkk..qggggggggggggggggggggggggggggggggggggggggyyykkk..........R",
-      "R......HYHHkkk..qggggggggggggggggggggggggggggggggggggggggyyykkk..........R",
-      "R......YHHYkkknnqggggggggggggggggggggggggggggggggggggggggyyykkk..........R",
-      "R......HHYHkkknnqggggggggggggggggggggggggggggggggggggggggquukkk..........R",
-      "R......HYHHkkknnqggggggggggggggggggggggggggggggggggggggggquukkk..........R",
-      "R......HHYHHYHyyyggggggggggggggggggggggggggggggggggggggggquukkk..........R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq...........CCC.R",
+      "R......HHYHkkk..qggggggggggggggggggggggggggggggggggggggggyyykkkHHYHH.CTC.R",
+      "R......HYHHkkk..qggggggggggggggggggggggggggggggggggggggggyyykkkHYHHY.CTC.R",
+      "R......YHHYkkknnqggggggggggggggggggggggggggggggggggggggggyyykkkYHHYH.CCC.R",
+      "R......HHYHkkknnqggggggggggggggggggggggggggggggggggggggggquukkkHHYHH.CTC.R",
+      "R......HYHHkkknnqggggggggggggggggggggggggggggggggggggggggquukkkHYHHY.CTC.R",
+      "R......HHYHHYHyyyggggggggggggggggggggggggggggggggggggggggquukkkHHYHH.CCC.R",
       "R.CCC..HYHHZHHyyyggggggggggggggggggggggggggggggggggggggggq...............R",
       "R.CTC..YHHYHHYyyyggggggggggggggggggggggggggggggggggggggggq...............R",
       "R.CTC..HYHHkkkuuqggggggggggggggggggggggggggggggggggggggggq...............R",
@@ -262,7 +262,7 @@ export const ZONES = {
     // This one is 4 wide x 8 tall (x11-14, rows 18-25), 2 tiles of path in front of it (rows 26-27) and 1 tile between it and the lawn's west border (x15, border at x16).
     // r = corner radius in tiles (leave it out for the full capsule, r: 2 here).
     stairwells: [{ x: 6, y: 11, w: 9, h: 12, r: 1, sw: 8, len: 9 }],   // the big stairs down (stairwell.js): 2 tiles wide, open on the east (lawn) side, fading into black - the lower floor comes later
-    holes: [{ x: 11, y: 40, w: 4, h: 8, r: 1 }, { x: 59, y: 33, w: 4, h: 8, r: 1 }],   // 2nd hole = a copy of the first on the EAST side, above the east lawn steps: x59-62, rows 33-40 = 1 tile from the lawn border (x57; free column x58) and 1 tile above the landing / hedge bed (free row 41)
+    holes: [{ x: 11, y: 40, w: 4, h: 8, r: 1 }, { x: 59, y: 33, w: 4, h: 8, r: 1 }, { x: 59, y: 15, w: 4, h: 8, r: 1 }],   // 3rd hole: inside the 2nd (north) east bay, x59-62 rows 15-22   // 2nd hole = a copy of the first on the EAST side, above the east lawn steps: x59-62, rows 33-40 = 1 tile from the lawn border (x57; free column x58) and 1 tile above the landing / hedge bed (free row 41)
     //   // the north hole was removed (the space is kept for the big stairs down)
     // curved rails (curverail.js): the west rail steps in 8 tiles beside the hole (straight at x8, rows 19-24, 2 tiles of floor between it and the hole) like the hole's own balustrade: straight runs with rounded
     // corners (r: 1 tile) only at the turns - across on rows 17 and 25, where the old walls were. The lower return runs straight into the rail of the path to zone 2.
@@ -273,7 +273,9 @@ export const ZONES = {
       // so from row 32 down the rail leaves the NEW edge, turns left (west) across row 33, runs north-south with exactly ONE tile of floor between the hole's kerb (x63) and the rail's inner face (x64),
       // turns right (east) again on row 40 and then runs straight SOUTH along the OLD edge line (x69: `tail: 5` = 5 tiles in from the new edge) - the lower part of the zone (hedge, path, rows 41-51) is unchanged.
       // Everything between the rail and the new edge, from row 32 down, is outside (skyline). ret = the row of the bend into the tail; y1 = how far the rail runs on past the south edge (52 rows + 5 tiles, as far as the camera can slide).
-      { y0: 32, ret: 41, y1: 57, depth: 9.25, r: 1, closed: true, side: 'e', tail: 5 }],
+      { y0: 32, ret: 41, y1: 57, depth: 9.25, r: 1, closed: true, side: 'e', tail: 5 },
+      // the 2nd EAST bay (north): an EVEN U - it leaves the east edge at row 14, steps in (same depth as the lower one), runs straight and returns to the edge at row 23 (no tail). Same size as the lower bay (9 rows, hole 4x8). Row 23 stays free between its bottom rail and the bench ring (rows 24-30)
+      { y0: 14, y1: 23, depth: 9.25, r: 1, closed: true, side: 'e' }],
     // white fences (map.js fences, drawn by renderer.js drawFence, solid): chains of points in tile units (x, y of the FOOT of the fence). This one closes the north side of the
     // landing at the top of the lawn steps (x14-16, row 8, to the lawn rail's end post at x16.5). The west side has no fence: the hedge bed (lifted to the landing's level on a semi-wall) is flush with it.
     fences: [
