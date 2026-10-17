@@ -82,16 +82,20 @@ export function railBands(c, step = 2) {
   const west = railBandsWest(c, step);
   return c.side === 'e' ? west.map((b) => ({ x: c.W - b.w, y: b.y, w: b.w, h: b.h })) : west;
 }
-function railBandsWest(c, step) {
-  const { pts } = railPath(c), n = Math.ceil((c.y1 - c.y0) / step), maxX = new Array(n).fill(0);
+function railBandsWest(c, step) { return bandsFromPath(railPath(c).pts, c.y0, c.y1, step); }
+// everything from the edge (x = 0) to the INNER face of a rail whose outer face is `pts`, as 2px rows between y0 and y1
+function bandsFromPath(pts, y0, y1, step) {
+  const n = Math.ceil((y1 - y0) / step), maxX = new Array(n).fill(0);
   for (const p of pts) for (let d = 0; d <= RAIL_W; d += 1) {
-    const x = p.x + p.ty * d, y = p.y - p.tx * d, b = Math.floor((y - c.y0) / step);
+    const x = p.x + p.ty * d, y = p.y - p.tx * d, b = Math.floor((y - y0) / step);
     if (b >= 0 && b < n && x > maxX[b]) maxX[b] = x;
   }
   const out = [];
-  for (let b = 0; b < n; b++) if (maxX[b] > 0.5) out.push({ x: 0, y: c.y0 + b * step, w: maxX[b] + 0.25, h: step + 0.01 });
+  for (let b = 0; b < n; b++) if (maxX[b] > 0.5) out.push({ x: 0, y: y0 + b * step, w: maxX[b] + 0.25, h: step + 0.01 });
   return out;
 }
+// the rounded north-west corner (cornerPath): solid from the edge to the inner face of the quarter circle, rows 0..r
+export const cornerBands = (r, step = 2) => bandsFromPath(cornerPath(r).pts, 0, r, step);
 
 // the curve of a zone in pixels (from the zone's tile-unit definition)
 export const roundedCornerPx = (d, tile) => ({ corner: d.corner, r: d.r * tile });

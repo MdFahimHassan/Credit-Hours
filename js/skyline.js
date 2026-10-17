@@ -39,7 +39,7 @@ const STAIR_LEN = 192;        // same for a flight of stairs
 const EXIT_VIEW = { zone3: { s: 80 } };   // per zone + side: reveal only this many px beyond an exit instead of OVER_PATH (and fade to black within it). Zone 3's south edge shows just a short glimpse of what is below
 const REVEAL_SPEED = 5;       // how quickly the camera slides (higher = snappier)
 
-import { TILE, getTile, getExit, zoneId, cols, rows, widthPx, heightPx, curvedRails } from './map.js';
+import { TILE, FOOT, groundDY, getTile, getExit, zoneId, cols, rows, widthPx, heightPx, curvedRails } from './map.js';
 import { railPath, faceX, mirrorX, RAIL_W } from './curverail.js';
 import { vineStrands, drawVines, drawVineLip } from './foliage.js';
 import { paintDoorFront } from './glassdoor.js';
@@ -162,22 +162,26 @@ function curveFacePts(c) {
 }
 function curveDist(side, p) {
   let best = Infinity;
+  const gt = p.y + groundDY(p.h), gb = p.y + p.h + FOOT;           // only the feet (the strip under the soles) meet the rail
   for (const c of curvedRails) {
     if (c.side !== side) continue;
     for (const q of curveFacePts(c)) {
-      const dx = Math.max(p.x - q.x, 0, q.x - (p.x + p.w)), dy = Math.max(p.y - q.y, 0, q.y - (p.y + p.h));
+      const dx = Math.max(p.x - q.x, 0, q.x - (p.x + p.w)), dy = Math.max(gt - q.y, 0, q.y - gb);
       const d = Math.hypot(dx, dy);
       if (d < best) best = d;
     }
   }
   return best;
 }
-function edgeDist(side, p, list, inset) {
+// `ground` = measure from the player's feet (the strip under the soles, map.js groundBox) to the rail's visible inner face (inset = RAIL_W): that is where he can really stand.
+// (the exit paths are measured from the hitbox, inset 0, as before)
+function edgeDist(side, p, list, inset, ground = false) {
+  const top = ground ? p.y + groundDY(p.h) : p.y, bot = ground ? p.y + p.h + FOOT : p.y + p.h, mid = (top + bot) / 2;
   let perp, lc;
-  if (side === 'e') { const f = curvedFace(p.cy, 'e'); perp = (f > 0 ? widthPx - f - RAIL_W : cols * TILE - inset) - (p.x + p.w); lc = p.cy; }
-  else if (side === 'w') { const f = curvedFace(p.cy); perp = p.x - (f > 0 ? f + RAIL_W : inset); lc = p.cy; }
-  else if (side === 'n') { perp = p.y - inset; lc = p.cx; }
-  else { perp = rows * TILE - inset - (p.y + p.h); lc = p.cx; }
+  if (side === 'e') { const f = curvedFace(mid, 'e'); perp = (f > 0 ? widthPx - f - RAIL_W : cols * TILE - inset) - (p.x + p.w); lc = p.cy; }
+  else if (side === 'w') { const f = curvedFace(mid); perp = p.x - (f > 0 ? f + RAIL_W : inset); lc = p.cy; }
+  else if (side === 'n') { perp = top - inset; lc = p.cx; }
+  else { perp = rows * TILE - inset - bot; lc = p.cx; }
   perp = Math.max(0, perp);
   let best = Infinity;
   for (const i of list) {
@@ -217,7 +221,7 @@ export const skyline = {
     let best = Infinity;
     for (const s of SIDES) {
       const F = f[s];
-      const dw = F.rails.length ? edgeDist(s, p, F.rails, TILE) : Infinity;
+      const dw = F.rails.length ? edgeDist(s, p, F.rails, RAIL_W, true) : Infinity;
       const dFog = Math.min(dw, curveDist(s, p));            // fog + reveal: the distance to the rail in ANY direction (a bay's north / south walls count too)
       const dp = F.exitsView.length ? edgeDist(s, p, F.exitsView, 0) : Infinity;
       let tw = clamp01(1 - dFog / NEAR);

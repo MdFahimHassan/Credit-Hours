@@ -45,11 +45,11 @@ const perimeter = (w, h, r) => 4 * (w / 2 - r) + 4 * (h / 2 - r) + 2 * PI * r;  
 export const holeInner = (o) => capsule(o.x + RIM, o.y + RIM, o.w - 2 * RIM, o.h - 2 * RIM, Math.max(0, holeR(o) - RIM));
 
 // Solid thin rectangles that follow the OUTER edge of the capsule (the foot of the fence), 2px bands: the player stops right at the kerb.
-// The fence is drawn in an oblique view: its bars and top cap stand UP the screen from the foot (RAIL_H px, see drawHoleRail), so standing just north of
-// the hole would put the shoes on the grills. The solid area is therefore the capsule PLUS everything it sweeps when it is moved up by SOLID_UP px
-// (= the fence height, the thickness of the top cap and the ~5px the shoes stick out below the hitbox): the player stops in front of the top cap.
+// The fence is drawn in an oblique view: its bars and top cap stand UP the screen from the foot, so the picture of the hole reaches higher than its outline: the
+// top of the cap is ~9px above the outer edge (the fence stands on the kerb, 4.5px inside the edge, and is RAIL_H + 1.5 + 0.75 tall). The solid area is therefore the capsule
+// PLUS everything it sweeps when it is moved up by SOLID_UP px: the player's SOLES (map.js groundBox) stop right at the top of the cap, not short of it, and not on the grills.
 // (Moving a shape up never changes its south edge, and the east / west edges only move where the curve does, so nothing else changes.)
-export const SOLID_UP = RAIL_H + 7;
+export const SOLID_UP = 9;
 export function holeBands(o, step = 2) {
   const out = [], r = holeR(o), ex = o.w / 2 - r, ey = o.h / 2 - r, cx = o.x + o.w / 2, cy = o.y + o.h / 2;
   const halfAt = (yy) => {                                         // half width of the capsule at height yy (0 outside it)

@@ -1,6 +1,7 @@
 // renderer.js - ALL drawing lives here. Game logic never touches the canvas.
 import { TILE, cols, rows, widthPx, heightPx, getTile, isSolid, items, zoneId, curvedRails, stairwells, roundedCorners, inCurvedRail, lawnBox, RAIL_UP, fences } from './map.js';
 import { railPath, cornerPath, RAIL_W } from './curverail.js';
+import { NOSE, HAT_TOP, HAT_BOT, HAT_START, HAT_TIP, TIP_R, HAT_ANGLE, HAT_HANDLE } from './nose.js';
 import { transition } from './transition.js';
 import { quest } from './quest.js';
 import { dialogue } from './dialogue.js';
@@ -11,7 +12,7 @@ import { drawCharacter } from './sprites.js';
 import { drawGlassFront, drawGlassTops } from './glass.js';
 import { drawStairwellInterior, drawStairwellRail } from './stairwell.js';
 import { skyline, drawSkyline, drawCurvedBays, drawCornerNotch } from './skyline.js';
-import { setVirtualUp, UP_ROWS, WATER_FILTERS } from './map.js';
+import { setVirtualUp, UP_ROWS, WATER_FILTERS, railEdges } from './map.js';
 import { getFloor } from './floor.js';
 import { paintHedge, hedgeBase, buildOverlay } from './foliage.js';
 import { drawPool, poolEntities, drawSignCard, signView, swimDepth, drawSwimmer } from './pool.js';
@@ -280,11 +281,7 @@ function drawRail(px, py, tx, ty) {
   if (tx === 0 && ty === 0 && roundedCorners.some((c) => c.corner === 'nw')) return;   // the rounded north-west corner: drawn by drawCurvedRails()
   if (inCurvedRail(tx, ty)) return;                                    // part of a curved rail: drawn as one piece by drawCurvedRails()
   const seed = tx * 7 + ty;
-  const edges = [];
-  if (ty === 0) edges.push('n');
-  if (ty === rows - 1 && !(zoneId === 'zone3' && tx === cols - 1)) edges.push('s');   // (zone 3: the south-east corner tile is part of the east rail only)
-  if (tx === 0 && !(zoneId === 'zone1' && ty === rows - 1)) edges.push('w');   // (zone 1: the south rail runs on along the path to zone 2 - no west piece in the corner)
-  if (tx === cols - 1 && !(zoneId === 'zone2' && ty === 0)) edges.push('e');   // (zone 2: the north-east corner tile is part of the north rail only)
+  const edges = railEdges(tx, ty);                                     // (map.js: the same rule gives the rail its collision)
   if (edges.length) {                                                  // on the edge of the zone: parapet + slats, outer side
     for (const s of edges) {
       const m = { e: [0, 1, -1, 0, px + TILE, py], w: [0, 1, 1, 0, px, py], n: [1, 0, 0, 1, px, py], s: [1, 0, 0, -1, px, py + TILE] }[s];
@@ -377,8 +374,7 @@ function drawCurvedRails(time) {
 //   HAT_ANGLE = steepness (degrees) where the diagonal turns into the round tip           HAT_HANDLE = how straight the diagonal is
 //   WELL_IN_TOP / WELL_IN_BOT = distance from each rail's centre-line to the void's edge (they differ by 4 because the two straight
 //   rails are built differently: top 14 -> void edge 32, bottom 142 -> void edge 128)
-const NOSE = { tx: 15, ty: 13, w: 4, h: 5 };
-const HAT_TOP = 14, HAT_BOT = 142, HAT_START = 27, HAT_TIP = 114, TIP_R = 26, HAT_ANGLE = 48, HAT_HANDLE = 10;
+// (NOSE, HAT_* live in nose.js: the player's collision with the nose is built from the same numbers)
 const WELL_X = 32, WELL_TOP = 32, WELL_BOT = 128, WELL_IN_TOP = 18, WELL_IN_BOT = 14;   // the void starts at tile 16 and fills rows 14-16
 let noseImg = null, noseMask = null;   // noseMask = the void's exact shape (pixel-snapped); the escalator well is painted through it
 function buildNose() {

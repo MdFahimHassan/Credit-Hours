@@ -14,7 +14,7 @@ You arrive on the rooftop by escalator, fading in from the floor below. A studen
 
 - **Opening cutscene:** an animated escalator ride with a fade-in from black (press `E` or `Space` to skip)
 - **Smooth movement:** 4-direction walking with a sprite walk cycle, using delta time so speed is the same on every monitor
-- **Tile-based collision:** walls, water and hedges block you, and you slide along them
+- **Tile-based collision:** walls, water and hedges block you, and you slide along them. Only your feet collide (a strip under the shoes), so you can stand right at the foot of anything; rails, holes and curved rails use their exact drawn shape
 - **Follow camera:** centers on the player and stops at the map edges
 - **NPC with dialogue:** talk to a student, who turns to face you
 - **Mini quest system:** a small state machine with an on-screen quest tracker

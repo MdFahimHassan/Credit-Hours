@@ -1,5 +1,5 @@
 // player.js - position, movement, and X/Y-separated collision.
-import { TILE, HEAD, FOOT, boxHitsSolid, solidRectsAt, isStairs, stairwellDepth, headWallBottom, footWallTop } from './map.js';
+import { TILE, COLL_H, groundDY, solidRectsAt, isStairs, stairwellDepth } from './map.js';
 import { input } from './input.js';
 
 const STAIR_SPEED = 0.85;   // walking speed on the stairs (1 = same as flat ground)
@@ -61,9 +61,11 @@ export class Player {
     this.onStairs = sd >= 0 || isStairs(Math.floor(this.cx / TILE), Math.floor((this.y + this.h - 2) / TILE));
     const speed = this.swimming ? this.speed * SWIM_SPEED : this.onStairs ? this.speed * STAIR_SPEED : this.speed;
 
+    // --- collision: only the FEET (a strip under the soles, see map.js groundBox) hit the map; swimming uses the whole hitbox (the water is a flat shape) ---
+    const gy = this.swimming ? 0 : groundDY(this.h), gh = this.swimming ? this.h : COLL_H;   // box = [this.y + gy, this.y + gy + gh]
     // --- X axis first: move, then undo overlap ---
     this.x += dx * speed * dt;
-    let hit = solidRectsAt(this.x, this.y, this.w, this.h);
+    let hit = solidRectsAt(this.x, this.y + gy, this.w, gh);
     if (hit.length) {
       // snap flush against the nearest edge we ran into (a whole tile, or a thin wall like a stair handrail)
       if (dx > 0) this.x = Math.min(...hit.map((r) => r.x)) - this.w;
@@ -71,23 +73,10 @@ export class Player {
     }
     // --- then Y axis: doing them separately lets you SLIDE along walls ---
     this.y += dy * speed * dt;
-    hit = solidRectsAt(this.x, this.y, this.w, this.h);
+    hit = solidRectsAt(this.x, this.y + gy, this.w, gh);
     if (hit.length) {
-      if (dy > 0) this.y = Math.min(...hit.map((r) => r.y)) - this.h;
-      else if (dy < 0) this.y = Math.max(...hit.map((r) => r.y + r.h));
-    }
-
-    // --- head and foot clearance: keep the head and the shoes off the plaster walls above / below (only if the player still fits) ---
-    // (each push only happens if the player then still has room on the other side too, so a 1-tile gap never traps or blocks him)
-    const wallBottom = this.swimming ? null : headWallBottom(this.x, this.y, this.w);   // (not while swimming: the pool rim must not push you about)
-    if (wallBottom !== null && this.y < wallBottom + HEAD) {
-      const ny = wallBottom + HEAD, ft = footWallTop(this.x, ny, this.w, this.h);
-      if (!boxHitsSolid(this.x, ny, this.w, this.h) && (ft === null || ny + this.h <= ft - FOOT)) this.y = ny;
-    }
-    const wallTop = this.swimming ? null : footWallTop(this.x, this.y, this.w, this.h);
-    if (wallTop !== null && this.y + this.h > wallTop - FOOT) {
-      const ny = wallTop - FOOT - this.h, hb = headWallBottom(this.x, ny, this.w);
-      if (!boxHitsSolid(this.x, ny, this.w, this.h) && (hb === null || ny >= hb + HEAD)) this.y = ny;
+      if (dy > 0) this.y = Math.min(...hit.map((r) => r.y)) - gy - gh;
+      else if (dy < 0) this.y = Math.max(...hit.map((r) => r.y + r.h)) - gy;
     }
 
     // walking animation only plays if we actually moved (not when pushing against a wall)

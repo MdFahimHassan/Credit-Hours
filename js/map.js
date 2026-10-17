@@ -4,7 +4,8 @@
 import { ZONES } from './zones.js';
 import { holeBands } from './hole.js';
 import { stairwellBands, stairDepth } from './stairwell.js';
-import { railBands, curvedRailPx, roundedCornerPx } from './curverail.js';
+import { railBands, curvedRailPx, roundedCornerPx, cornerBands } from './curverail.js';
+import { noseBands, NOSE } from './nose.js';
 export const TILE = 32;
 
 export const UP_ROWS = 11;                  // see upperTile() below
@@ -57,7 +58,6 @@ export function loadZone(id) {
   lawnBoxCache = null;
   buildThinWalls();
 }
-loadZone('zone1');                           // the game starts in zone 1
 
 // ---- zone 1: the lawn above the top edge --------------------------------------------------------------------------
 // The upper zone is a full grass lawn. It is NOT part of the map (nothing there is walkable or solid); renderer.js paints it, only while
@@ -119,6 +119,61 @@ export function lawnBox() {
 }
 export const RAIL_UP = 15;   // how far (px) the white lawn rail stands up the screen from the wall (renderer.js drawLawnRail)
 
+// ---- railings (R) ------------------------------------------------------------------------------------------------------------------
+// An 'R' tile is NOT a full 32px block: renderer.js drawRail() paints the rail on the OUTER 24px of a tile on the edge of the zone (16px of slats + 8px of parapet, RAIL_W),
+// and as a 19px-thick strip (6..25px into the tile) for a railing in the middle of a zone (the escalator). The collision follows that picture, so there is no
+// invisible 8px of wall beside a rail. (Tiles of a curved rail, the rounded corner and the escalator nose are replaced by exact bands, see buildThinWalls.)
+const RAIL_EDGE = 24, RAIL_MID_A = 6, RAIL_MID_B = 25;
+export function railEdges(tx, ty) {                                  // which edges of the zone this rail tile sits on (renderer.js drawRail uses the same rule)
+  const e = [];
+  if (ty === 0) e.push('n');
+  if (ty === rows - 1 && !(zoneId === 'zone3' && tx === cols - 1)) e.push('s');             // (zone 3: the south-east corner tile is part of the east rail only)
+  if (tx === 0 && !(zoneId === 'zone1' && ty === rows - 1)) e.push('w');                    // (zone 1: the south rail runs on along the path to zone 2 - no west piece in the corner)
+  if (tx === cols - 1 && !(zoneId === 'zone2' && ty === 0)) e.push('e');                    // (zone 2: the north-east corner tile is part of the north rail only)
+  return e;
+}
+const isRailTile = (x, y) => getTile(x, y) === 'R';
+// is this 'R' tile drawn by something else (and so given its collision by something else)?
+const railHandledElsewhere = (tx, ty) => inCurvedRail(tx, ty)
+  || (tx === 0 && ty === 0 && roundedCorners.some((c) => c.corner === 'nw'))
+  || (zoneId === 'zone1' && tx >= NOSE.tx + 1 && tx < NOSE.tx + NOSE.w && ty >= NOSE.ty && ty < NOSE.ty + NOSE.h);
+// Does the player's ground strip collide with the WHOLE tile? (R tiles never do - their rails are thin walls; so are the nose tiles of the escalator)
+const tileBlocks = (tx, ty) => {
+  if (getTile(tx, ty) === 'R' && tx >= 0 && ty >= 0 && tx < cols && ty < rows) return false;
+  if (zoneId === 'zone1' && tx >= NOSE.tx + 1 && tx < NOSE.tx + NOSE.w && ty >= NOSE.ty && ty < NOSE.ty + NOSE.h) return false;   // the escalator nose (nose.js)
+  return isSolid(tx, ty);
+};
+function railRects() {
+  const out = [];
+  for (let ty = 0; ty < rows; ty++) for (let tx = 0; tx < cols; tx++) {
+    if (grid[ty][tx] !== 'R' || railHandledElsewhere(tx, ty)) continue;
+    const px = tx * TILE, py = ty * TILE, edges = railEdges(tx, ty);
+    if (edges.length) {
+      for (const s of edges) out.push(s === 'n' ? { x: px, y: py, w: TILE, h: RAIL_EDGE } : s === 's' ? { x: px, y: py + TILE - RAIL_EDGE, w: TILE, h: RAIL_EDGE }
+        : s === 'w' ? { x: px, y: py, w: RAIL_EDGE, h: TILE } : { x: px + TILE - RAIL_EDGE, y: py, w: RAIL_EDGE, h: TILE });
+      continue;
+    }
+    let h = isRailTile(tx - 1, ty) || isRailTile(tx + 1, ty), v = isRailTile(tx, ty - 1) || isRailTile(tx, ty + 1);
+    if (!h && !v) h = true;
+    if (h) out.push({ x: px, y: py + RAIL_MID_A, w: TILE, h: RAIL_MID_B - RAIL_MID_A });
+    if (v) out.push({ x: px + RAIL_MID_A, y: py, w: RAIL_MID_B - RAIL_MID_A, h: TILE });
+  }
+  return out;
+}
+function mergeRects(list) {                                          // glue neighbouring rects with the same extent together (fewer rects to test every frame)
+  const same = (a, b, k, l) => Math.abs(a[k] - b[k]) < 0.001 && Math.abs(a[l] - b[l]) < 0.001;
+  for (const [pos, size, cross, crossSize] of [['x', 'w', 'y', 'h'], ['y', 'h', 'x', 'w']]) {
+    list.sort((a, b) => a[cross] - b[cross] || a[crossSize] - b[crossSize] || a[pos] - b[pos]);
+    const res = [];
+    for (const r of list) {
+      const last = res[res.length - 1];
+      if (last && same(last, r, cross, crossSize) && Math.abs(last[pos] + last[size] - r[pos]) < 0.001) last[size] += r[size]; else res.push({ ...r });
+    }
+    list = res;
+  }
+  return list;
+}
+
 // Thin solid walls: the silver handrail down the middle of each zone 1 stair flight is a rail, not floor, so it blocks the
 // player. It is drawn by renderer.js drawFlight() at x = tile edge - 2 (4px wide, with a 6px post at each end of the flight);
 // these rectangles must match that drawing. A flight lane is 32px wide, so the 20px player still fits either side of it.
@@ -127,6 +182,9 @@ function buildThinWalls() {
   for (const h of holes) thinWalls.push(...holeBands(h));          // every hole is solid, following its curve exactly (hole.js)
   for (const s of stairwells) thinWalls.push(...stairwellBands(s));   // the kerb ring + the barrier in the dark (stairwell.js); the steps are walkable
   for (const c of curvedRails) thinWalls.push(...railBands(c));    // so is everything outside a curved rail (curverail.js)
+  for (const c of roundedCorners) if (c.corner === 'nw') thinWalls.push(...cornerBands(c.r));   // the rounded north-west corner: the quarter circle, not the whole corner tile
+  if (zoneId === 'zone1') thinWalls.push(...noseBands());                                          // the rounded nose of the escalator rail (nose.js)
+  thinWalls.push(...mergeRects(railRects()));                                                      // every other railing 'R' tile: exactly the picture of the rail, not the whole tile
   const L = lawnBox();                                              // the white rail round the lawn: where it stops (the entrance), the end post stands up in front of the open floor - solid too
   if (L) for (const x of [L.x0, L.x1]) for (let y = L.y0 + 1; y <= L.y1; y++)
     if (grid[y][x] === 'q' && grid[y - 1][x] !== 'q') thinWalls.push({ x: x * TILE + 14, y: y * TILE - RAIL_UP, w: 4, h: RAIL_UP });
@@ -170,7 +228,7 @@ export function solidRectsAt(x, y, w, h) {
   const y0 = Math.floor(y / TILE), y1 = Math.floor((y + h - 0.01) / TILE);
   for (let ty = y0; ty <= y1; ty++)
     for (let tx = x0; tx <= x1; tx++)
-      if (isSolid(tx, ty)) out.push({ x: tx * TILE, y: ty * TILE, w: TILE, h: TILE });
+      if (tileBlocks(tx, ty)) out.push({ x: tx * TILE, y: ty * TILE, w: TILE, h: TILE });
   for (const r of thinWalls)
     if (x < r.x + r.w && x + w > r.x && y < r.y + r.h && y + h > r.y) out.push(r);
   return out;
@@ -189,10 +247,10 @@ export const nearWaterFilter = (cx, cy, facing) => zoneId === 'zone1' && facing 
 // drawRestroomDoor). Stand in front of the doors, facing them, and press E. Returns 'men' | 'women' | null.
 export function nearRestroom(cx, cy, facing) {
   if (zoneId !== 'zone2') return null;
-  const dy = facing === 'up' ? -44 : facing === 'down' ? 44 : 0;      // look 44px ahead of the player's centre
-  if (!dy) return null;
-  for (const dx of [0, -8, 8]) {                                       // a little sideways slack so you need not be perfectly centred
-    const c = getTile(Math.floor((cx + dx) / TILE), Math.floor((cy + dy) / TILE));
+  const sgn = facing === 'up' ? -1 : facing === 'down' ? 1 : 0;
+  if (!sgn) return null;
+  for (const dy of [16, 30, 44]) for (const dx of [0, -8, 8]) {          // look ahead of the player's centre (he can now stand right at the door: the wall tile is only ~10-30px away)
+    const c = getTile(Math.floor((cx + dx) / TILE), Math.floor((cy + sgn * dy) / TILE));
     if (c === 'M') return 'men';
     if (c === 'G') return 'women';
   }
@@ -219,26 +277,15 @@ export function findSeat(cx, cy) {
   }
   return best;
 }
-// Head / foot clearance: the sprite is ~17px taller than the collision box above it and its shoes stick out ~5px below it, so walking up to a
-// wall, hedge, bench or the pool rim used to put the head or the feet on it. Solid tiles (see clearsPlayer) keep both off them: the player stops HEAD / FOOT px short. (Skipped where there is no room, e.g. a 1-tile path under a wall.)
-export const HEAD = 17;                                   // the head reaches ~17px above the hitbox
-export const FOOT = 5;                                    // the shoes reach ~5px below the hitbox
-const clearsPlayer = (tx, ty) => { const c = getTile(tx, ty); return c !== 'R' && isSolid(tx, ty); };   // every solid tile (walls, hedges and their rails, benches, the pool rim...) except the edge railings
-const lowBed = (tx, ty) => zoneId === 'zone3' && 'HYZC'.includes(getTile(tx, ty));   // zone 3: the hedge bed (on a LOW semi-wall, renderer.js liftedFront) and the sitting-area benches are low: a head may pass over them
-const clearsHead = (tx, ty) => clearsPlayer(tx, ty) && getTile(tx, ty) !== 'B' && !lowBed(tx, ty);   // the head may overlap the FLAT pool rim / lawn border (so you can walk right up to it from the south), the shoes may not (no standing on it from the north)
-export function headWallBottom(x, y, w) {                // lowest pixel edge of a wall tile that the strip above the hitbox overlaps, or null
-  const x0 = Math.floor(x / TILE), x1 = Math.floor((x + w - 0.01) / TILE);
-  const y0 = Math.floor((y - HEAD) / TILE), y1 = Math.floor((y - 0.01) / TILE);
-  let best = null;
-  for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++)
-    if (clearsHead(tx, ty)) best = Math.max(best ?? -Infinity, (ty + 1) * TILE);
-  return best;
-}
-export function footWallTop(x, y, w, h) {               // top pixel edge of the highest wall tile that the strip below the hitbox overlaps, or null
-  const x0 = Math.floor(x / TILE), x1 = Math.floor((x + w - 0.01) / TILE);
-  const y0 = Math.floor((y + h) / TILE), y1 = Math.floor((y + h + FOOT - 0.01) / TILE);
-  let best = null;
-  for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++)
-    if (clearsPlayer(tx, ty)) best = Math.min(best ?? Infinity, ty * TILE);
-  return best;
-}
+// ---- The player's collision box --------------------------------------------------------------------------------------------------
+// The sprite is ~38px tall: the head reaches ~13px above the 20x20 hitbox and the soles ~5px below it. Only the FEET collide with the map, exactly like a person
+// standing on the roof: a COLL_H-px-tall strip whose bottom edge is the SOLE of the shoes (hitbox bottom + FOOT). The head and body are free to pass in front
+// of a wall, a hedge, a bench...: in this oblique view the picture of a solid thing fills its own tile, so the player may stand right at the foot of it.
+// (This replaces the old "head / foot clearance", which kept the whole 38px sprite off every solid tile: it stopped the player ~37px - more than a tile - short of
+// anything he approached from the south, and left the tiles in front of walls, rooms and rails unreachable.)
+export const FOOT = 5;                                    // the soles reach ~5px below the hitbox
+export const COLL_H = 8;                                  // height of the strip under the soles that collides (a shoe, not a body)
+export const groundDY = (h) => h + FOOT - COLL_H;         // offset of that strip's top edge from the hitbox top
+export const groundBox = (x, y, w, h) => ({ x, y: y + groundDY(h), w, h: COLL_H });
+
+loadZone('zone1');                           // the game starts in zone 1 (at the END of the file: loading a zone builds the thin walls, which use the helpers above)
