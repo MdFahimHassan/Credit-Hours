@@ -7,7 +7,7 @@
 //   r      radius of the four rounded corners (tiles) - like the hole's balustrade: straight runs with proper curves only at the turns
 //   y1     the first row of the open path the rail leads into: the rail turns west and runs STRAIGHT into the path's own rail (skyline.js paintExit), whose
 //          outer face is 24px (RAIL_W) above y1, so the two rails are one piece
-//   closed  (optional, true) a bay with no path at its end: the rail turns west and then SOUTH again in a rounded corner (like the bend at the top), so it ends at (0, y1) heading
+//   side    (optional) 'w' (default) = a bay on the WEST edge; 'e' = the mirror image on the EAST edge (the same bay flipped left-right: it leaves the east edge at y0, steps in towards the floor by `depth`\n//          and returns at y1). Everything below is computed in the WEST frame; the east version is that picture mirrored (x -> W - x), see mirrorX / railBands / renderer.js / skyline.js.\n//   ret / tail  (optional, closed bays) `ret` = the row of the bend back out (default y1); `tail` = tiles: instead of rejoining the edge the rail turns south there and runs straight on, `tail` tiles in from the edge, down to y1\n//          (zone 3 east: the zone is wider in its upper part, the lower part keeps the old edge line)\n//   closed  (optional, true) a bay with no path at its end: the rail turns west and then SOUTH again in a rounded corner (like the bend at the top), so it ends at (0, y1) heading
 //          south and joins the straight edge rail that carries on below row y1 (instead of running straight west into an exit path's rail)
 // Rows y0..y1-1 of x 0 must be 'R' in the map: those tiles stay solid and are NOT drawn as straight rail (renderer.js drawRail skips them),
 // the curved rail (drawn by renderer.js drawCurvedRails) replaces them. Everything left of the curve is "outside": the skyline carries on there
@@ -23,7 +23,7 @@ const STEP = 0.5;                  // distance (px) between two sampled points o
 // It starts at (0, y0) heading south and ends at (0, y1 - RAIL_W) heading WEST, where the rail of the open path takes over.
 // The inward normal (towards the floor) of a point is (ty, -tx).
 export function railPath(c) {
-  const D = c.depth, R = Math.min(c.r, D / 2), y0 = c.y0, closed = !!c.closed, yE = closed ? c.y1 - R : c.y1 - RAIL_W;
+  const D = c.depth, R = Math.min(c.r, D / 2), y0 = c.y0, closed = !!c.closed, T = c.tail || 0, yE = closed ? (c.ret ?? c.y1) - R : c.y1 - RAIL_W;
   const arc = (cx, cy, a0, a1) => ({ len: Math.abs(a1 - a0) * R, at: (u) => {
     const a = a0 + (a1 - a0) * u, sg = Math.sign(a1 - a0);
     return { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a), tx: -sg * Math.sin(a), ty: sg * Math.cos(a) };
@@ -36,8 +36,12 @@ export function railPath(c) {
     line(D, y0 + 2 * R, D, yE - R),                  // the straight part at full depth
     arc(D - R, yE - R, 0, PI / 2),                   // turns west
     ...(closed
-      ? [line(D - R, yE, R, yE),                     // closed bay: runs west...
-         arc(R, yE + R, -PI / 2, -PI)]               // ...and turns south in a rounded corner (the mirror of the first bend) into the straight edge rail, which carries on from y1
+      ? (T > 0
+        ? [line(D - R, yE, T + R, yE),               // `tail`: runs west to T + R from the edge ...
+           arc(T + R, yE + R, -PI / 2, -PI),         // ... turns south in a rounded corner ...
+           line(T, yE + R, T, c.y1)]                 // ... and runs straight south, T px in from the edge, as far as y1 (the lower part of the zone keeps its old edge there)
+        : [line(D - R, yE, R, yE),                   // closed bay: runs west...
+           arc(R, yE + R, -PI / 2, -PI)])            // ...and turns south in a rounded corner (the mirror of the first bend) into the straight edge rail, which carries on from y1
       : [line(D - R, yE, 0, yE)]),                   // and runs straight into the rail of the path
   ].filter((q) => q.len > 0.01);
   const total = parts.reduce((t, q) => t + q.len, 0), K = Math.max(2, Math.ceil(total / STEP)), pts = [];
@@ -73,7 +77,12 @@ export function faceX(c, y, path = railPath(c)) {
 }
 
 // Solid thin rectangles: everything from the edge up to the INNER face of the rail, in 2px rows (like hole.js holeBands) - the player stops right at the parapet.
+// (an east bay: the same bands mirrored onto the east edge, x -> c.W - x)
 export function railBands(c, step = 2) {
+  const west = railBandsWest(c, step);
+  return c.side === 'e' ? west.map((b) => ({ x: c.W - b.w, y: b.y, w: b.w, h: b.h })) : west;
+}
+function railBandsWest(c, step) {
   const { pts } = railPath(c), n = Math.ceil((c.y1 - c.y0) / step), maxX = new Array(n).fill(0);
   for (const p of pts) for (let d = 0; d <= RAIL_W; d += 1) {
     const x = p.x + p.ty * d, y = p.y - p.tx * d, b = Math.floor((y - c.y0) / step);
@@ -86,4 +95,7 @@ export function railBands(c, step = 2) {
 
 // the curve of a zone in pixels (from the zone's tile-unit definition)
 export const roundedCornerPx = (d, tile) => ({ corner: d.corner, r: d.r * tile });
-export const curvedRailPx = (d, tile) => ({ y0: d.y0 * tile, y1: d.y1 * tile, depth: d.depth * tile, r: d.r * tile, closed: !!d.closed });
+// W = the zone's width in px (needed by an east bay, which is the west one mirrored)
+export const curvedRailPx = (d, tile, W = 0) => ({ y0: d.y0 * tile, y1: d.y1 * tile, depth: d.depth * tile, r: d.r * tile, closed: !!d.closed, side: d.side === 'e' ? 'e' : 'w', W, ret: (d.ret ?? d.y1) * tile, tail: (d.tail ?? 0) * tile });
+// x of a point of the west-frame picture, as it lies on this rail's own side of the zone
+export const mirrorX = (c, x) => (c.side === 'e' ? c.W - x : x);

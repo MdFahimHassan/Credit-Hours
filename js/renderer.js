@@ -271,7 +271,7 @@ function drawRail(px, py, tx, ty) {
   const seed = tx * 7 + ty;
   const edges = [];
   if (ty === 0) edges.push('n');
-  if (ty === rows - 1) edges.push('s');
+  if (ty === rows - 1 && !(zoneId === 'zone3' && tx === cols - 1)) edges.push('s');   // (zone 3: the south-east corner tile is part of the east rail only)
   if (tx === 0) edges.push('w');
   if (tx === cols - 1 && !(zoneId === 'zone2' && ty === 0)) edges.push('e');   // (zone 2: the north-east corner tile is part of the north rail only)
   if (edges.length) {                                                  // on the edge of the zone: parapet + slats, outer side
@@ -291,7 +291,7 @@ function drawRail(px, py, tx, ty) {
 }
 
 // ---- curved rails (curverail.js) ---------------------------------------------------------------------------------------
-// The west rail of zone 3 steps in beside the hole and back out in smooth bends. It looks exactly like a straight edge rail tile (concrete parapet
+// The west (and east) rail of zone 3 steps in beside the hole and back out in smooth bends. It looks exactly like a straight edge rail tile (concrete parapet
 // under steel slats, a post every ~4 tiles and at the end) but is painted ONCE along the true curve: every band is one smooth polygon between
 // two offsets of the centre line (exact tangents, 0.5px steps), so the edges stay clean. The slat pitch is stretched by a hair (7.9 - 8.1px) so that the
 // pattern joins the straight rail tiles at both ends. The skyline outside the curve is painted by skyline.js drawCurvedBays().
@@ -336,12 +336,15 @@ function buildCurvedRail(c, path = railPath(c)) {
 }
 function drawCurvedRails(time) {
   for (const c of curvedRails) {
-    if (c.y0 > camera.y + VH || c.y1 < camera.y || camera.x > c.depth + RAIL_W) continue;
-    drawCurvedBays(ctx, camera, VW, VH, time);                          // the skyline outside the curve (over the floor tiles under it)
-    const key = zoneId + '|' + c.y0;
+    const east = c.side === 'e';
+    if (c.y0 > camera.y + VH || c.y1 < camera.y) continue;
+    if (east ? camera.x + VW < widthPx - c.depth - RAIL_W : camera.x > c.depth + RAIL_W) continue;
+    drawCurvedBays(ctx, camera, VW, VH, time, c);                       // the skyline outside the curve (over the floor tiles under it)
+    const key = zoneId + '|' + c.side + '|' + c.y0;
     if (!curvedImgs.has(key)) curvedImgs.set(key, buildCurvedRail(c));
     const im = curvedImgs.get(key);
-    ctx.drawImage(im.cv, im.x, im.y);
+    if (east) { ctx.save(); ctx.translate(widthPx, 0); ctx.scale(-1, 1); ctx.drawImage(im.cv, im.x, im.y); ctx.restore(); }   // an east bay is the west one mirrored (lit faces and slat pattern included, like the straight east rail tiles)
+    else ctx.drawImage(im.cv, im.x, im.y);
   }
   for (const rc of roundedCorners) {                                    // rounded north-west corner of the rail (a quarter circle in tile (0,0))
     if (camera.x > rc.r + RAIL_W || camera.y > rc.r + RAIL_W) continue;
@@ -856,7 +859,7 @@ function drawFlight(px, py, tx, ty) {
 //   P_X0 / P_X1 = left / right edge of the portal (the middle tile is 32-64)     P_TOP = top edge of the portal AND of the wall piers
 //   (the wall face is as tall as the frame, so the roof gets shorter when P_TOP gets smaller)
 const P_X0 = 24, P_X1 = 72, P_TOP = 36, FRAME = 3, FLOOR_Y = 90;
-const BLOCKS = { zone1: [{ tx: 24, ty: 0 }], zone3: [{ tx: 11, ty: 35, ext: 64, mirror: true, extinguisher: { x: 439, y: 1063 } }, { tx: 11, ty: 25, ext: 64, mirror: true, back: true }] };   // ext = px of extra roof BEHIND the 3x3 block (zone 3: 2 more rows, the roof is 3 tiles deep)
+const BLOCKS = { zone1: [{ tx: 24, ty: 0 }], zone3: [{ tx: 11, ty: 35, ext: 64, mirror: true, extinguisher: { x: 439, y: 1063 } }, { tx: 11, ty: 25, ext: 64, mirror: true, back: true }, { tx: 60, ty: 28, ext: 96 }] };   // (the last one: the EAST storage room above the east hole, x60-62 rows 25-30, TWO free rows 31-32 in front of it (the hole's balustrade reaches 18px above the hole, so one row is too tight to stand in): not mirrored, so its louvered wall is on the WEST, facing the steps; its door faces south)   // ext = px of extra roof BEHIND the 3x3 block (zone 3: 2 more rows, the roof is 3 tiles deep)
 //   // top-left tile of each 3x3 block per zone; mirror = the louvered face is on the EAST (zone 3: it faces the stairs, as in the photo)
 //   // back = the room seen from its BACK (zone 3, the second storage room: its door is on the north side, hidden from the camera; we see the roof and the concrete back wall on the south side, drawBlockBack)
 function drawBasementBlocks(camera) { for (const B of BLOCKS[zoneId] ?? []) (B.back ? drawBlockBack : drawBasementBlock)(camera, B); }
@@ -1566,7 +1569,7 @@ function drawCredits() {
   ctx.font = 'bold 20px monospace'; ctx.fillStyle = '#ffd54f'; ctx.fillText('CREDITS', 30, 44);
   ctx.font = '14px monospace'; ctx.fillStyle = '#fff';
   let y = 78;
-  y = wrap('Game: Md. Fahim Hassan & Shahriar Islam Tawsifa - BRAC University, Dept. of CSE', 30, y, VW - 60, 20) + 8;
+  y = wrap('Game: Md. Fahim Hassan & Shahriar Islam Tawsif - BRAC University, Dept. of CSE', 30, y, VW - 60, 20) + 8;
   y = wrap('Character sprite: made with the Universal LPC Spritesheet Character Generator.', 30, y, VW - 60, 20) + 8;
   y = wrap('Sprites contributed as part of the Liberated Pixel Cup project from OpenGameArt.org: http://opengameart.org/content/lpc-collection', 30, y, VW - 60, 20) + 8;
   y = wrap('License: Creative Commons Attribution-ShareAlike 3.0 (CC-BY-SA 3.0) http://creativecommons.org/licenses/by-sa/3.0/', 30, y, VW - 60, 20) + 8;

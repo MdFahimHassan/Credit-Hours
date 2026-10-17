@@ -19,7 +19,7 @@ export let items = [];                       // [{x, y, collected}] in tile coor
 export let holes = [];                       // capsule-shaped openings in the floor, in PIXELS: [{x, y, w, h}] - from the zone's `holes` (tile units), see hole.js
 export let stairwells = [];                  // big stairs down to the (not yet built) lower floor, in PIXELS: [{x, y, w, h}] - from the zone's `stairwells`, see stairwell.js
 export let roundedCorners = [];               // rounded rail corners in PIXELS: [{corner: 'nw', r}] - from the zone's `roundedCorners`, see curverail.js cornerPath
-export let curvedRails = [];                 // curved west-edge rails in PIXELS: [{y0, y1, depth, r}] - from the zone's `curvedRails` (tile units), see curverail.js
+export let curvedRails = [];                 // curved west- or east-edge rails in PIXELS: [{y0, y1, depth, r, side}] - from the zone's `curvedRails` (tile units), see curverail.js
 let lawnBoxCache = null;
 export let fences = [];                      // white fences in PIXELS: [{ pts: [[x, y], ...] }] - from the zone's `fences` (tile units), see renderer.js drawFence
 export let thinWalls = [];                   // solid pixel rectangles thinner than a tile (the stair handrails) - see buildThinWalls()
@@ -51,7 +51,7 @@ export function loadZone(id) {
   items = itemCache[id];
   holes = (zone.holes ?? []).map((h) => ({ x: h.x * TILE, y: h.y * TILE, w: h.w * TILE, h: h.h * TILE, r: h.r === undefined ? undefined : h.r * TILE }));
   stairwells = (zone.stairwells ?? []).map((s) => ({ x: s.x * TILE, y: s.y * TILE, w: s.w * TILE, h: s.h * TILE, r: s.r === undefined ? undefined : s.r * TILE, sw: s.sw === undefined ? undefined : s.sw * TILE, len: s.len === undefined ? undefined : s.len * TILE }));
-  curvedRails = (zone.curvedRails ?? []).map((d) => curvedRailPx(d, TILE));
+  curvedRails = (zone.curvedRails ?? []).map((d) => curvedRailPx(d, TILE, widthPx));
   roundedCorners = (zone.roundedCorners ?? []).map((d) => roundedCornerPx(d, TILE));
   fences = (zone.fences ?? []).map((f) => ({ pts: f.points.map(([x, y]) => [x * TILE, y * TILE]) }));
   lawnBoxCache = null;
@@ -159,7 +159,8 @@ function buildThinWalls() {
 }
 
 // Is this x0 tile part of a curved rail (drawn by renderer.js drawCurvedRails instead of as a straight rail tile)?
-export const inCurvedRail = (tx, ty) => tx === 0 && curvedRails.some((c) => ty * TILE >= c.y0 && ty * TILE < c.y1);
+export const inCurvedRail = (tx, ty) => curvedRails.some((c) => ty * TILE >= c.y0 && ty * TILE < c.y1 && (tx === (c.side === 'e' ? cols - 1 : 0) ||
+  (c.tail > 0 && tx === cols - 1 - c.tail / TILE && ty * TILE >= c.ret)));   // (a bay with a `tail`: the tiles under the straight tail are covered by the curve too)
 
 // Every solid rectangle (whole tiles + thin walls) that a pixel-space box overlaps: [{x, y, w, h}]
 export function solidRectsAt(x, y, w, h) {
