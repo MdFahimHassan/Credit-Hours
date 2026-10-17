@@ -815,15 +815,15 @@ function fenceEntities(camera) {
   return out;
 }
 
-// the red fire extinguisher hanging on the louvered wall of the storage room (zone 3), beside the top of the steps (x, y = top-left, 8 x 13 px)
+// the red fire extinguisher hanging on the FRONT wall of the storage room (zone 3), on the pier left of the door (x, y = top-left of the 10 x 17 px picture)
 function drawExtinguisher(x, y) {
   const R = (dx, dy, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x + dx, y + dy, w, h); };
-  R(0, 12, 8, 2, 'rgba(0,0,0,0.30)');                       // shadow on the floor
-  R(1, 2, 6, 1, '#3b3b42'); R(1, 3, 1, 8, '#3b3b42');       // wall bracket / strap
-  R(1, 4, 6, 8, '#c62828'); R(1, 4, 2, 8, '#e53935'); R(6, 4, 1, 8, '#8e1b1b');   // red cylinder, lit left edge, shaded right
-  R(1, 7, 6, 2, '#f2f2f2'); R(2, 7, 4, 1, '#2f2f35');      // white label
-  R(2, 3, 4, 1, '#c62828'); R(3, 1, 3, 2, '#2b2b30');       // shoulder + black valve head
-  R(1, 0, 3, 1, '#2b2b30'); R(0, 1, 1, 6, '#1c1c20');        // handle + hose hanging down the side
+  R(2, 6, 9, 12, 'rgba(0,0,0,0.16)');                       // soft shadow on the wall, down and to the right (it hangs a little off it)
+  R(0, 6, 10, 1, '#3b3b42'); R(0, 13, 10, 1, '#3b3b42');    // the two straps / brackets that hold it to the wall
+  R(1, 5, 8, 11, '#c62828'); R(1, 5, 2, 11, '#e53935'); R(7, 5, 2, 11, '#8e1b1b');   // red cylinder, lit left edge, shaded right
+  R(1, 9, 8, 3, '#f2f2f2'); R(2, 10, 6, 1, '#2f2f35');      // white label
+  R(2, 4, 6, 1, '#c62828'); R(3, 2, 4, 2, '#2b2b30');       // shoulder + black valve head
+  R(2, 1, 5, 1, '#2b2b30'); R(0, 2, 1, 8, '#1c1c20');        // handle + hose hanging down the side
 }
 // the concrete landing at the top of the lawn steps (zone 3, 'y'): the colour of the treads
 function drawLanding(px, py, tx, ty) {
@@ -889,7 +889,7 @@ function drawFlight(px, py, tx, ty) {
 //   P_X0 / P_X1 = left / right edge of the portal (the middle tile is 32-64)     P_TOP = top edge of the portal AND of the wall piers
 //   (the wall face is as tall as the frame, so the roof gets shorter when P_TOP gets smaller)
 const P_X0 = 24, P_X1 = 72, P_TOP = 36, FRAME = 3, FLOOR_Y = 90;
-const BLOCKS = { zone1: [{ tx: 24, ty: 0 }], zone3: [{ tx: 11, ty: 35, ext: 64, mirror: true, extinguisher: { x: 439, y: 1063 } }, { tx: 11, ty: 25, ext: 64, mirror: true, back: true }, { tx: 60, ty: 28, ext: 96 }] };   // (the last one: the EAST storage room above the east hole, x60-62 rows 25-30, TWO free rows 31-32 in front of it (the hole's balustrade reaches 18px above the hole, so one row is too tight to stand in): not mirrored, so its louvered wall is on the WEST, facing the steps; its door faces south)   // ext = px of extra roof BEHIND the 3x3 block (zone 3: 2 more rows, the roof is 3 tiles deep)
+const BLOCKS = { zone1: [{ tx: 24, ty: 0 }], zone3: [{ tx: 11, ty: 35, ext: 64, mirror: true, extinguisher: { x: 359, y: 1172 } }, { tx: 11, ty: 25, ext: 64, mirror: true, back: true }, { tx: 60, ty: 28, ext: 96 }] };   // (the last one: the EAST storage room above the east hole, x60-62 rows 25-30, TWO free rows 31-32 in front of it (the hole's balustrade reaches 18px above the hole, so one row is too tight to stand in): not mirrored, so its louvered wall is on the WEST, facing the steps; its door faces south)   // ext = px of extra roof BEHIND the 3x3 block (zone 3: 2 more rows, the roof is 3 tiles deep)
 //   // top-left tile of each 3x3 block per zone; mirror = the louvered face is on the EAST (zone 3: it faces the stairs, as in the photo)
 //   // back = the room seen from its BACK (zone 3, the second storage room: its door is on the north side, hidden from the camera; we see the roof and the concrete back wall on the south side, drawBlockBack)
 function drawBasementBlocks(camera) { for (const B of BLOCKS[zoneId] ?? []) (B.back ? drawBlockBack : drawBasementBlock)(camera, B); }
@@ -962,6 +962,25 @@ function drawBlockBack(camera, B) {
   ctx.restore();
 }
 
+// Zone 2: the pool rim stands one step ABOVE the paving (a raised kerb round the tank). Seen from above only the front (south) face shows, wherever the rim
+// meets open floor; the lit top surface (coping) is a little brighter and the seams are kept.
+const RIM_H = 14;                                                  // px: height of the kerb's front face
+function drawPoolRim(px, py, tx, ty) {
+  const open = getTile(tx, ty + 1);
+  const front = open !== 'B' && open !== '~';                      // south face visible: the south rim row (and the foot of the east / west rims)
+  const top = front ? TILE - RIM_H : TILE;
+  ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(px, py, TILE, top);                  // lit top surface
+  ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(px, py, TILE, 2); ctx.fillRect(px, py, 2, top);   // seams
+  if (getTile(tx + 1, ty) !== 'B') { ctx.fillStyle = 'rgba(0,0,0,0.10)'; ctx.fillRect(px + TILE - 2, py, 2, top); }
+  if (front) {
+    const y = py + top;
+    ctx.fillStyle = '#9fa6ad'; ctx.fillRect(px, y, TILE, RIM_H);                              // concrete face, in shade
+    ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(px, y, TILE, 2);                          // crease under the coping
+    ctx.fillStyle = 'rgba(0,0,0,0.10)'; ctx.fillRect(px + 10, y, 1, RIM_H); ctx.fillRect(px + 21, y, 1, RIM_H);
+    ctx.fillStyle = 'rgba(0,0,0,0.32)'; ctx.fillRect(px, py + TILE - 3, TILE, 3);              // contact shadow on the paving
+  }
+}
+
 // Tiles that stand on the grey stone paving (see floor.js). Everything else keeps its flat colour from COLORS.
 const STONE_FLOOR = '.pXURCTaoc12345678mV';
 function drawTile(ch, px, py, tx, ty, time) {
@@ -998,7 +1017,7 @@ function drawTile(ch, px, py, tx, ty, time) {
   } else if (ch === 'R') {                            // railing: grey steel slats on a concrete parapet
     drawRail(px, py, tx, ty);
   } else if (ch === 'B') {                            // pool rim: light concrete with seams
-    ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(px, py, TILE, 2); ctx.fillRect(px, py, 2, TILE);
+    drawPoolRim(px, py, tx, ty);
   } else if (ch === 'r') {                            // red gym mat: rubber ribbing + yellow edge strip against the wall
     ctx.fillStyle = 'rgba(0,0,0,0.10)'; for (let i = 4; i < TILE; i += 6) ctx.fillRect(px, py + i, TILE, 1);
     ctx.fillStyle = 'rgba(255,255,255,0.06)'; for (let i = 5; i < TILE; i += 6) ctx.fillRect(px, py + i, TILE, 1);

@@ -19,7 +19,7 @@ const LIT_STEPS = 5;           // fully lit for this many steps (the near part o
 const BLACK_STEPS = 3;         // ... and the last steps are completely black
 const BARRIER_STEPS = 12;      // the barrier across the stairs stands this many steps in (they are nearly black by then)
 const PI = Math.PI;
-const VOID_DARK = 0.80;        // how dark the lower floor is seen from up here (0 = fully lit, 1 = pure black): "barely visible", not black
+const VOID_DARK = 0.62;        // how dark the lower floor is seen from up here (0 = fully lit, 1 = pure black): "barely visible", not black
 const FLOOR_TILE = 13;         // lower-floor tile size in px (same as the holes in glass.js)
 
 // the lower floor seen at the bottom of the stairs and beside them: the same grey checker + joints as the floor under the holes (glass.js)

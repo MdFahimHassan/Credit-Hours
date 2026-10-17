@@ -28,9 +28,12 @@ const STUDENT_COUNT = 34;               // how many people are down there in tot
 const DIM = 0.16;                       // how dark the floor below is (0-1)
 const GLASS_TINT = 0.18;                // how strongly the glass tints what's below (0-1)
 // crowd mix
-const PHONE_COUNT = Math.round(STUDENT_COUNT * 0.30);   // ~30% stand on their phone (changes over time)
-const GROUP_SIZES = [5, 4, 3];                           // starting gossip circles (~35% of the crowd)
-const GROUP_TARGET = GROUP_SIZES.length;                 // when a circle breaks up, a new one forms
+const PHONE_SHARE = 0.30;                                // ~30% stand on their phone (changes over time)
+const HOLE_DENSITY = 0.5;                                // holes (hole.js): people per 1000 px^2 of the area they roam - every hole has its OWN crowd
+const HOLE_MARGIN = 30;                                  // px of extra floor round a hole for people to roam in (the parallax slide reveals it)
+let PHONE_COUNT = Math.round(STUDENT_COUNT * PHONE_SHARE);   // (set per crowd: the skylight and every hole each have their own)
+let GROUP_SIZES = [5, 4, 3];                             // starting gossip circles (~35% of the crowd)
+let GROUP_TARGET = GROUP_SIZES.length;                   // when a circle breaks up, a new one forms
 const PERSONAL = 11;                                     // px: walkers steer away from anyone closer than this
 // -------------------------------------------------------------------------------------------
 
@@ -151,9 +154,12 @@ function disperse(g) {
   }
 }
 
-function buildCrowd() {
+function buildCrowd(bb = bbox, count = STUDENT_COUNT, margin = 60) {
   people = []; groups = []; formT = rand(4, 8);
-  world = { hx: bbox.w / 2 + 60, hy: bbox.h / 2 + 60 };       // area people can roam (a margin covers the parallax shift)
+  PHONE_COUNT = Math.round(count * PHONE_SHARE);
+  GROUP_SIZES = count >= 30 ? [5, 4, 3] : count >= 20 ? [4, 3] : [3];
+  GROUP_TARGET = GROUP_SIZES.length;
+  world = { hx: bb.w / 2 + margin, hy: bb.h / 2 + margin };       // area people can roam (a margin covers the parallax shift)
 
   for (const size of GROUP_SIZES) {                            // 1) gossip circles
     const c = freeSpot(46, 24);
@@ -166,7 +172,7 @@ function buildCrowd() {
     p.x = s.x; p.y = s.y; p.phoneTimer = rand(8, 35);
     people.push(p);
   }
-  while (people.length < STUDENT_COUNT) {                      // 3) wanderers (the rest)
+  while (people.length < count) {                      // 3) wanderers (the rest)
     const p = newPerson('walk'), s = freeSpot(14);
     p.x = s.x; p.y = s.y; p.wait = rand(0, 3);
     people.push(p);
@@ -308,32 +314,14 @@ export function drawGlassFront(ctx, px, py, tx, ty) {
   }
 }
 
-// ---- the glass tops + everything seen through them (called once per frame, after the tiles) ----
-export function drawGlassTops(ctx, time, camera, VW, VH) {
-  scan();
-  if (!bbox) return;
-  prepareVariants();                                                      // builds one recoloured student per frame
-  // skip if the platform is off-screen
-  if (bbox.x > camera.x + VW || bbox.x + bbox.w < camera.x || bbox.y > camera.y + VH || bbox.y + bbox.h < camera.y) return;
-  if (!floorPattern) floorPattern = makeFloorPattern(ctx);
-
-  // run the crowd simulation (rebuilt whenever the zone changes)
-  if (crowdZone !== zoneId) { buildCrowd(); crowdZone = zoneId; lastTime = null; }
-  const dt = lastTime == null ? 0 : Math.min(0.05, Math.max(0, time - lastTime));
-  lastTime = time;
-  stepCrowd(dt);
-
-  ctx.save();
-  let clip = holeClip;
-  if (!clip) { clip = new Path2D(); for (const t of glass) clip.rect(t.tx * TILE + t.lx, t.ty * TILE, t.tw, t.top); }
-  ctx.clip(clip);
-
+// The lower floor + the people on it + the depth dimmer, seen through whatever clip is active (bb = the box round the opening).
+function drawBelow(ctx, time, camera, VW, VH, bb) {
   // parallax: the floor below is far away, so it slides less than the roof when the camera moves
-  const px = (camera.x + VW / 2 - bbox.cx) * PARALLAX, py = (camera.y + VH / 2 - bbox.cy) * PARALLAX;
-  const ox = bbox.cx + px, oy = bbox.cy + py;                             // origin of the "below" world
+  const px = (camera.x + VW / 2 - bb.cx) * PARALLAX, py = (camera.y + VH / 2 - bb.cy) * PARALLAX;
+  const ox = bb.cx + px, oy = bb.cy + py;                             // origin of the "below" world
 
   // 1) lower floor
-  const ex = bbox.w / 2 + 150, ey = bbox.h / 2 + 150;                      // how far the floor must extend (parallax margin)
+  const ex = bb.w / 2 + 150, ey = bb.h / 2 + 150;                      // how far the floor must extend (parallax margin)
   ctx.save();
   ctx.translate(Math.round(ox), Math.round(oy));
   ctx.fillStyle = floorPattern; ctx.fillRect(-ex, -ey, ex * 2, ey * 2);
@@ -352,7 +340,7 @@ export function drawGlassTops(ctx, time, camera, VW, VH) {
   ctx.imageSmoothingEnabled = true;                                        // tiny sprites look better smoothed
   const list = [];
   for (const p of people) {
-    if (Math.abs(p.x + px) > bbox.w / 2 + 24 || Math.abs(p.y + py) > bbox.h / 2 + 24) continue;   // not near the glass
+    if (Math.abs(p.x + px) > bb.w / 2 + 24 || Math.abs(p.y + py) > bb.h / 2 + 24) continue;   // not near the glass
     list.push(p);
   }
   list.sort((a, b) => a.y - b.y);
@@ -365,14 +353,59 @@ export function drawGlassTops(ctx, time, camera, VW, VH) {
   ctx.restore();
 
   // 3) depth dimmer: the floor below is in shade
-  ctx.fillStyle = `rgba(14,24,32,${DIM})`; ctx.fillRect(bbox.x, bbox.y, bbox.w, bbox.h);
+  ctx.fillStyle = `rgba(14,24,32,${DIM})`; ctx.fillRect(bb.x, bb.y, bb.w, bb.h);
+}
 
-  if (holeClip) {                                                          // a hole: no glass - the shaft walls, then the fence round it (hole.js)
-    for (const h of holes) drawHoleInterior(ctx, h);
-    ctx.restore();
-    for (const h of holes) drawHoleRail(ctx, h);
-    return;
+// Holes (hole.js): every hole looks down onto its OWN patch of lower floor with its own crowd (a single crowd spread over the whole zone would leave them empty).
+let holeCrowds = [];
+function drawHoles(ctx, time, camera, VW, VH) {
+  if (crowdZone !== zoneId) {
+    holeCrowds = holes.map((h) => {
+      const bb = { x: h.x, y: h.y, w: h.w, h: h.h, cx: h.x + h.w / 2, cy: h.y + h.h / 2 };
+      const count = Math.max(8, Math.round(((bb.w + 2 * HOLE_MARGIN) * (bb.h + 2 * HOLE_MARGIN) / 1000) * HOLE_DENSITY));
+      buildCrowd(bb, count, HOLE_MARGIN);
+      return { bb, phone: PHONE_COUNT, sizes: GROUP_SIZES, target: GROUP_TARGET, people, groups, world, formT };
+    });
+    crowdZone = zoneId; lastTime = null;
   }
+  const dt = lastTime == null ? 0 : Math.min(0.05, Math.max(0, time - lastTime));
+  lastTime = time;
+  holes.forEach((h, i) => {
+    const c = holeCrowds[i], bb = c.bb;
+    ({ people, groups, world, formT } = c); PHONE_COUNT = c.phone; GROUP_SIZES = c.sizes; GROUP_TARGET = c.target;   // switch to this hole's crowd
+    stepCrowd(dt);
+    c.groups = groups; c.formT = formT;
+    if (h.x > camera.x + VW || h.x + h.w < camera.x || h.y - 20 > camera.y + VH || h.y + h.h < camera.y) return;   // off-screen: still simulated, not drawn
+    ctx.save();
+    ctx.clip(holeInner(h));
+    drawBelow(ctx, time, camera, VW, VH, bb);
+    drawHoleInterior(ctx, h);
+    ctx.restore();
+    drawHoleRail(ctx, h);
+  });
+}
+
+// ---- the glass tops + everything seen through them (called once per frame, after the tiles) ----
+export function drawGlassTops(ctx, time, camera, VW, VH) {
+  scan();
+  if (!bbox) return;
+  prepareVariants();                                                      // builds one recoloured student per frame
+  // skip if the platform is off-screen
+  if (bbox.x > camera.x + VW || bbox.x + bbox.w < camera.x || bbox.y > camera.y + VH || bbox.y + bbox.h < camera.y) return;
+  if (!floorPattern) floorPattern = makeFloorPattern(ctx);
+
+  if (holeClip) { drawHoles(ctx, time, camera, VW, VH); return; }          // holes: each one gets its own crowd below
+
+  // run the crowd simulation (rebuilt whenever the zone changes)
+  if (crowdZone !== zoneId) { buildCrowd(); crowdZone = zoneId; lastTime = null; }
+  const dt = lastTime == null ? 0 : Math.min(0.05, Math.max(0, time - lastTime));
+  lastTime = time;
+  stepCrowd(dt);
+
+  ctx.save();
+  const clip = new Path2D(); for (const t of glass) clip.rect(t.tx * TILE + t.lx, t.ty * TILE, t.tw, t.top);
+  ctx.clip(clip);
+  drawBelow(ctx, time, camera, VW, VH, bbox);
 
   // 4) the glass ------------------------------------------------------------
   ctx.fillStyle = `rgba(170,208,222,${GLASS_TINT})`; ctx.fillRect(bbox.x, bbox.y, bbox.w, bbox.h);   // blue-green tint

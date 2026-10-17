@@ -3,7 +3,7 @@
 //
 // Tiles shared by all zones:
 //   #  wall (solid)        R  railing (solid)      .  open floor (grey stone paving, see floor.js)
-//   V  street dustbin, blue plastic (solid) - zone 1: x36, rows 7 and 22, in the corners beside the east hedge bed
+//   V  street dustbin, blue plastic (solid) - zone 1: x36, rows 7 and 22, in the corners beside the east hedge bed; zone 2: x1, rows 7 and 22; zone 3: one in the corner where each sitting area meets the skyline rail
 //   a  blue recycling bin (solid)   o  red non-recyclable bin (solid)  - zone 1, side by side above the left end of the escalator rail
 //   c  steel-blue pillar on a concrete plinth (solid) - zone 1: two rows (9 and 21), 6 tiles above / below the escalator
 //   p  old "path" tile (walkable). Zone 1 no longer uses it; in other zones it now just looks like the stone floor
@@ -147,9 +147,9 @@ export const ZONES = {
     "R.CCC..HH.....................X",
     "R.CTC..HH..YYHHYYZYHHYH########",
     "R.CTC..HH..HHYYHHYHYHZY########",
-    "R.CCC.VHH..HYHHZHHYHHYH#MM#####",
+    "R.CCC..HH..HYHHZHHYHHYH#MM#####",
     "R.............................#",
-    "R.............................#",
+    "RV............................#",
     "#ZHYY.........................#",
     "#HHYH.........................#",
     "#HYHY..BBBBBBBBBBBBBBBBBB.....X",
@@ -164,9 +164,9 @@ export const ZONES = {
     "#HZYH..BBBBBBBBBBBBBBBBBB.....X",
     "#YHHH.........................X",
     "#HYHY.........................#",
+    "RV............................#",
     "R.............................#",
-    "R.............................#",
-    "R.CCC.VHH.HHYYHHYHYHZY#GG######",
+    "R.CCC..HH.HHYYHHYHYHZY#GG######",
     "R.CTC..HH.HHHHHHHZHHYY#########",
     "R.CTC..HH.HZHHHHHHHZHY#########",
     "R.CCC..HH.YYHHYYZYHHYH#########",
@@ -203,11 +203,11 @@ export const ZONES = {
       "R.CTC.HHH..HYHHHqggggggggggggggggggggggggggggggggggggggggq...HHHHHHY.CCC.R",
       "R.CTC.HYH..YHHHHqggggggggggggggggggggggggggggggggggggggggq...HHYHHHH.CTC.R",
       "R.CCC...........qggggggggggggggggggggggggggggggggggggggggq...HHHHHYH.CTC.R",
-      "R...............qggggggggggggggggggggggggggggggggggggggggq...HYHHHHH.CCC.R",
+      "RV..............qggggggggggggggggggggggggggggggggggggggggq...HYHHHHH.CCC.R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...HHHHYHH.CTC.R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...YHHHHHH.CTC.R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...HHHYHHH.CCC.R",
-      "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
+      "R...............qggggggggggggggggggggggggggggggggggggggggq..............VR",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
@@ -219,20 +219,20 @@ export const ZONES = {
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...........CCC.R",
-      "R......HHYHkkk..qggggggggggggggggggggggggggggggggggggggggyyykkkHHYHH.CTC.R",
-      "R......HYHHkkk..qggggggggggggggggggggggggggggggggggggggggyyykkkHYHHY.CTC.R",
-      "R......YHHYkkknnqggggggggggggggggggggggggggggggggggggggggyyykkkYHHYH.CCC.R",
-      "R......HHYHkkknnqggggggggggggggggggggggggggggggggggggggggquukkkHHYHH.CTC.R",
-      "R......HYHHkkknnqggggggggggggggggggggggggggggggggggggggggquukkkHYHHY.CTC.R",
+      "RV.....HHYHkkk..qggggggggggggggggggggggggggggggggggggggggyyykkkHHYHH.CTC.R",
+      "R.CCC..HYHHkkk..qggggggggggggggggggggggggggggggggggggggggyyykkkHYHHY.CTC.R",
+      "R.CTC..YHHYkkknnqggggggggggggggggggggggggggggggggggggggggyyykkkYHHYH.CCC.R",
+      "R.CTC..HHYHkkknnqggggggggggggggggggggggggggggggggggggggggquukkkHHYHH.CTC.R",
+      "R.CCC..HYHHkkknnqggggggggggggggggggggggggggggggggggggggggquukkkHYHHY.CTC.R",
       "R......HHYHHYHyyyggggggggggggggggggggggggggggggggggggggggquukkkHHYHH.CCC.R",
-      "R.CCC..HYHHZHHyyyggggggggggggggggggggggggggggggggggggggggq...............R",
+      "R.CCC..HYHHZHHyyyggggggggggggggggggggggggggggggggggggggggq..............VR",
       "R.CTC..YHHYHHYyyyggggggggggggggggggggggggggggggggggggggggq...............R",
       "R.CTC..HYHHkkkuuqggggggggggggggggggggggggggggggggggggggggq...............R",
       "R.CCC..YHHYkkkuuqggggggggggggggggggggggggggggggggggggggggq...............R",
       "R.CTC..HHZHkkkuuqggggggggggggggggggggggggggggggggggggggggq...............R",
       "R.CTC..HYHHkkk..qggggggggggggggggggggggggggggggggggggggggq...............R",
       "R.CCC..YHHYkkk..qggggggggggggggggggggggggggggggggggggggggq...............R",
-      "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
+      "RV..............qggggggggggggggggggggggggggggggggggggggggq...............R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq..........R....R",
@@ -264,7 +264,7 @@ export const ZONES = {
     // capsule-shaped holes you can look down through, ringed by a balustrade (hole.js). Tile units: x, y, w, h of the OUTER edge.
     // This one is 4 wide x 8 tall (x11-14, rows 18-25), 2 tiles of path in front of it (rows 26-27) and 1 tile between it and the lawn's west border (x15, border at x16).
     // r = corner radius in tiles (leave it out for the full capsule, r: 2 here).
-    stairwells: [{ x: 6, y: 11, w: 9, h: 12, r: 1, sw: 8, len: 9 }],   // the big stairs down (stairwell.js): 2 tiles wide, open on the east (lawn) side, fading into black - the lower floor comes later
+    stairwells: [{ x: 6, y: 11, w: 8, h: 12, r: 1, sw: 8, len: 8 }],   // the big stairs down (stairwell.js): 2 tiles wide, open on the east (lawn) side, fading into black - the lower floor comes later
     holes: [{ x: 11, y: 40, w: 4, h: 8, r: 1 }, { x: 59, y: 33, w: 4, h: 8, r: 1 }, { x: 59, y: 15, w: 4, h: 8, r: 1 }],   // 3rd hole: inside the 2nd (north) east bay, x59-62 rows 15-22   // 2nd hole = a copy of the first on the EAST side, above the east lawn steps: x59-62, rows 33-40 = 1 tile from the lawn border (x57; free column x58) and 1 tile above the landing / hedge bed (free row 41)
     //   // the north hole was removed (the space is kept for the big stairs down)
     // curved rails (curverail.js): the west rail steps in 8 tiles beside the hole (straight at x8, rows 19-24, 2 tiles of floor between it and the hole) like the hole's own balustrade: straight runs with rounded

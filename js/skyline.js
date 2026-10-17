@@ -842,7 +842,8 @@ export function drawCurvedBays(g, camera, VW, VH, time, only = null) {
     g.imageSmoothingEnabled = false;
     drawPicture(g, side, L.pano, time);
     g.restore();
-    drawCurveVines(g, c, pts, side === 'e', time);                   // a few vines hanging from the curved rail (still inside the clip)
+    const va = vineAlpha(side);                                      // the vines fade out with the same fog as the skyline, so they never float over the milk when you are far away
+    if (va > 0.01) { g.globalAlpha = va; drawCurveVines(g, c, pts, side === 'e', time); g.globalAlpha = 1; }   // a few vines hanging from the curved rail (still inside the clip)
     g.restore();
   }
 }
@@ -917,6 +918,9 @@ function fogDens(side) {
   return dens;
 }
 
+// How visible the hanging vines are: like the skyline picture they are thick and clear next to the rail and vanish into the fog when you are far (fogDens runs from FOG_NEAR to FOG_FAR)
+const vineAlpha = (side) => clamp01(1 - (fogDens(side) - FOG_NEAR) / (FOG_FAR - FOG_NEAR) * 1.15);
+
 function drawWindows(g, side, L, len, time) {
   g.save();
   g.beginPath();
@@ -933,10 +937,11 @@ function drawWindows(g, side, L, len, time) {
   } else drawPicture(g, side, L.pano, time);
   g.restore();
 
-  const vines = vineStrands(zoneId, side);                     // hedge vines hanging over the edge (foliage.js VINE_EDGES): in front of the fog
-  if (vines.length) { drawVines(g, vines, time); drawVineLip(g, vines); }
+  const va = vineAlpha(side);                                  // vines fade with the fog (see vineAlpha): no leaves floating over the milk when you are far from the edge
+  const vines = vineStrands(zoneId, side);                     // hedge vines hanging over the edge (foliage.js VINE_EDGES)
+  if (vines.length) { g.globalAlpha = va; if (va > 0.01) drawVines(g, vines, time); g.globalAlpha = 1; drawVineLip(g, vines); }   // (the leafy lip is part of the hedge: it stays)
   const rv = railVineStrands(zoneId, side, features()[side].rails);   // a few single vines hanging from the balcony rails (foliage.js section 4)
-  if (rv.length) { drawVines(g, rv, time); drawVineLip(g, rv); }
+  if (rv.length) { g.globalAlpha = va; if (va > 0.01) drawVines(g, rv, time); g.globalAlpha = 1; drawVineLip(g, rv); }
 }
 
 // The picture of one side (skyline, traffic, clouds, birds, fog) in that side's local frame: u along the edge, d away from it.
