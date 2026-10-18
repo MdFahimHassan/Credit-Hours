@@ -1,5 +1,5 @@
 // renderer.js - ALL drawing lives here. Game logic never touches the canvas.
-import { TILE, cols, rows, widthPx, heightPx, getTile, isSolid, items, zoneId, curvedRails, stairwells, roundedCorners, isRoundedCornerTile, innerCorners, isInnerCornerTile, inCurvedRail, lawnBox, RAIL_UP, fences } from './map.js';
+import { TILE, cols, rows, widthPx, heightPx, getTile, isSolid, propAt, items, zoneId, curvedRails, stairwells, roundedCorners, isRoundedCornerTile, innerCorners, isInnerCornerTile, inCurvedRail, lawnBox, RAIL_UP, fences } from './map.js';
 import { railPath, cornerPath, innerCornerPath, RAIL_W } from './curverail.js';
 import { NOSE, HAT_TOP, HAT_BOT, HAT_START, HAT_TIP, TIP_R, HAT_ANGLE, HAT_HANDLE } from './nose.js';
 import { transition } from './transition.js';
@@ -1116,6 +1116,30 @@ function drawTile(ch, px, py, tx, ty, time) {
   } else if (ch === 'W') {
     drawGlassFront(ctx, px, py, tx, ty);
   }
+  const prop = propAt(tx, ty);                         // a loose object standing on this tile (zones.js `props`): drawn over whatever ground the tile has
+  if (prop) drawProp(prop, px, py);
+}
+
+// ---- props (zones.js `props`): bins on any ground + the floor vent ----------------------------------------------------------------------------
+function drawProp(q, px, py) {
+  if (q.type === 'bin-blue') drawBin('a', px, py);
+  else if (q.type === 'bin-red') drawBin('o', px, py);
+  else if (q.type === 'vent') drawVent(px, py);
+}
+// The floor vent, copied from the photo: a square lid of small square cells (rusty brown, dark gaps) lying in a shallow recess in the concrete,
+// with a lit lip on the near edges. Flat on the floor and walkable. 8x8 cells, 3px pitch.
+function drawVent(px, py) {
+  const R = (x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(px + x, py + y, w, h); };
+  R(2, 2, 28, 28, '#a3a094');                                  // worn concrete rim round the frame
+  R(2, 2, 28, 1, '#b8b5aa'); R(2, 2, 1, 28, '#b0ada2'); R(2, 29, 28, 1, '#8c897f'); R(29, 2, 1, 28, '#8c897f');
+  R(4, 4, 24, 24, '#2b2622');                                  // the dark recess the lid sits in
+  R(4, 4, 24, 2, '#171412'); R(4, 4, 2, 24, '#1d1916');        // shadow thrown by the north and west lips
+  for (let j = 0; j < 8; j++) for (let i = 0; i < 8; i++) {    // the grid: one 2x2 cell per 3px, 1px dark gap between them
+    const x = 5 + i * 3, y = 5 + j * 3, a = (i * 3 + j * 5) % 4;
+    R(x, y, 2, 2, a === 0 ? '#9a7a58' : a === 1 ? '#8b6c4c' : a === 2 ? '#7d6044' : '#937453');
+    R(x, y, 1, 1, '#b8946c');                                  // each cell catches the light on its top-left corner
+  }
+  R(4, 27, 24, 1, '#cfccc0'); R(27, 4, 1, 24, '#b9b6aa');     // lit lip along the south and east edges
 }
 
 

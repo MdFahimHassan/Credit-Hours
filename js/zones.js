@@ -282,6 +282,19 @@ export const ZONES = {
       { y0: 32, ret: 41, y1: 57, depth: 9.25, r: 1, closed: true, side: 'e', tail: 5 },
       // the 2nd EAST bay (north): an EVEN U - it leaves the east edge at row 14, steps in (same depth as the lower one), runs straight and returns to the edge at row 23 (no tail). Same size as the lower bay (9 rows, hole 4x8). Row 23 stays free between its bottom rail and the bench ring (rows 24-30)
       { y0: 14, y1: 23, depth: 9.25, r: 1, closed: true, side: 'e' }],
+    // props (map.js props, drawn by renderer.js drawProp): bins and floor vents standing ON a tile, whatever its ground. Tile units. 'bin-blue' = recyclable, 'bin-red' = non-recyclable (both solid);
+    // 'vent' = the flat grid lid in the floor (walkable). `id` is the handle for the story: findProp('vent-east') / findProp('vent-west') in map.js.
+    props: [
+      // south-middle of the lawn: on the grass right above the block between the two flights (x36-37), where the stairs come up
+      { type: 'bin-blue', x: 36, y: 47 }, { type: 'bin-red', x: 37, y: 47 },
+      // north-middle of the lawn: the top row of grass (row 4), the middle two of the 40 lawn columns (x17-56)
+      { type: 'bin-blue', x: 36, y: 4 }, { type: 'bin-red', x: 37, y: 4 },
+      // EAST platform (landing x57-59, rows 25-27, above the east hole): along its north edge, the blue bin where the player stood, then the red one, then the vent against the storage room
+      { type: 'bin-blue', x: 57, y: 25 }, { type: 'bin-red', x: 58, y: 25 }, { type: 'vent', x: 59, y: 25, id: 'vent-east' },
+      // WEST platform (landing x14-16, rows 30-32): the same three in a mirror image - blue next to the lawn, red, then the vent by the hedge. They go along the MIDDLE row because the
+      // flights leave the landing on x14-15 of rows 29 and 33, so the north and south rows are the stair lanes (and row 31 keeps the whole x16 column open as the way onto the lawn)
+      { type: 'bin-blue', x: 16, y: 31 }, { type: 'bin-red', x: 15, y: 31 }, { type: 'vent', x: 14, y: 31, id: 'vent-west' },
+    ],
     // white fences (map.js fences, drawn by renderer.js drawFence, solid): chains of points in tile units (x, y of the FOOT of the fence). This one closes the north side of the
     // landing at the top of the lawn steps (x14-16, row 8, to the lawn rail's end post at x16.5). The west side has no fence: the hedge bed (lifted to the landing's level on a semi-wall) is flush with it.
     fences: [

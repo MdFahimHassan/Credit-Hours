@@ -24,6 +24,8 @@ export let innerCorners = [];                 // rounded INNER rail corners in P
 export let curvedRails = [];                 // curved west- or east-edge rails in PIXELS: [{y0, y1, depth, r, side}] - from the zone's `curvedRails` (tile units), see curverail.js
 let lawnBoxCache = null;
 export let fences = [];                      // white fences in PIXELS: [{ pts: [[x, y], ...] }] - from the zone's `fences` (tile units), see renderer.js drawFence
+export let props = [];                       // loose objects standing ON a tile of any ground (grass, landing...): [{ type, x, y, id? }] - from the zone's `props`, see PROP_SOLID / renderer.js drawProp
+const propMap = new Map();                   // 'ty*1000+tx' -> prop, so propAt() is a lookup
 export let thinWalls = [];                   // solid pixel rectangles thinner than a tile (the stair handrails) - see buildThinWalls()
 const itemCache = {};                        // keeps the ID card "collected" when you leave and come back
 
@@ -57,6 +59,9 @@ export function loadZone(id) {
   roundedCorners = (zone.roundedCorners ?? []).map((d) => roundedCornerPx(d, TILE));
   innerCorners = (zone.innerCorners ?? []).map((d) => ({ x: d.x * TILE, r: d.r * TILE }));
   fences = (zone.fences ?? []).map((f) => ({ pts: f.points.map(([x, y]) => [x * TILE, y * TILE]) }));
+  props = (zone.props ?? []).map((q) => ({ ...q }));                // loose objects on top of the ground tiles (bins, vents...)
+  propMap.clear();
+  for (const q of props) propMap.set(q.y * 1000 + q.x, q);
   lawnBoxCache = null;
   fences.push(...hedgeFences(0, rows - 1, fences));                 // every hedge bed gets the white fence of zone 3 on each edge that faces open floor
   buildThinWalls();
@@ -126,7 +131,17 @@ export function getTile(tx, ty) {
 }
 export const swim = { on: false };   // true while the player is in the zone 2 pool: the water ('~') is then open to him (the rim 'B' stays solid, so the steel ladder is the only way in or out)
 const SOLID_TILES = '#RLlAfdDvEFB~MGKCTWHYZJQaoVc12345678qmkejw';   // H = hedge, Y = bush mound, Z = tree, J = gym door, Q = gym poster wall, c = pillar, 1-6 = amphitheatre tiers, m = flat base slab under the tiers, q = hedge semi-wall (all solid)
-export const isSolid = (tx, ty) => { const c = getTile(tx, ty); return c === '~' ? !swim.on : SOLID_TILES.includes(c); };
+// ---- props: objects that stand on a tile whatever its ground is (the tile itself stays grass / landing / paving) ---------------------------------------
+// zones.js `props: [{ type, x, y, id? }]` (tile units). type: 'bin-blue' (recyclable), 'bin-red' (non-recyclable) - solid, one tile each;
+// 'vent' - the flat grid lid in the floor, WALKABLE (story hook: look it up with findProp('vent-east') or propAt(x, y)).
+const PROP_SOLID = { 'bin-blue': true, 'bin-red': true, vent: false };
+export const propAt = (tx, ty) => propMap.get(ty * 1000 + tx);
+export const findProp = (id) => props.find((q) => q.id === id) ?? null;
+export const isSolid = (tx, ty) => {
+  const q = propMap.get(ty * 1000 + tx);
+  if (q && PROP_SOLID[q.type]) return true;
+  const c = getTile(tx, ty); return c === '~' ? !swim.on : SOLID_TILES.includes(c);
+};
 
 // Exit info for a tile of the current zone (or null)
 export const stairwellDepth = (cx, cy) => { for (const s of stairwells) { const t = stairDepth(s, cx, cy); if (t >= 0) return t; } return -1; };   // -1 = not on the big stairs down, else 0..1 how far down (stairwell.js)
