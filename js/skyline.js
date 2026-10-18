@@ -39,7 +39,7 @@ const STAIR_LEN = 192;        // same for a flight of stairs
 const EXIT_VIEW = { zone3: { s: 80 } };   // per zone + side: reveal only this many px beyond an exit instead of OVER_PATH (and fade to black within it). Zone 3's south edge shows just a short glimpse of what is below
 const REVEAL_SPEED = 5;       // how quickly the camera slides (higher = snappier)
 
-import { TILE, FOOT, groundDY, getTile, getExit, zoneId, cols, rows, widthPx, heightPx, curvedRails, roundedCorners } from './map.js';
+import { TILE, FOOT, groundDY, getTile, getExit, zoneId, cols, rows, widthPx, heightPx, curvedRails, roundedCorners, innerCorners } from './map.js';
 import { railPath, faceX, mirrorX, RAIL_W } from './curverail.js';
 import { vineStrands, railVineStrands, drawCurveVines, drawVines, drawVineLip } from './foliage.js';
 import { paintDoorFront } from './glassdoor.js';
@@ -901,7 +901,12 @@ function drawSide(g, side, time) {
   }
   for (const grp of F.groups) {                                // rails that must stand in front of a window picture (PATH_RAIL_FRONT)
     const cfg = PATH_RAIL_FRONT[zoneId]?.[side]?.[grp.a];
-    if (cfg) g.drawImage(railOverlay(grp, side, cfg.wall), cfg.wall ? (grp.b + 1) * TILE : grp.a * TILE - RAIL_W, 0);
+    if (!cfg) continue;
+    const ox = cfg.wall ? (grp.b + 1) * TILE : grp.a * TILE - RAIL_W;
+    const ic = side === 'n' && cfg.wall ? innerCorners.find((c) => c.x === ox) : null;        // the rail meets the north rail in a rounded inner corner: the first Rs px belong to the curve (renderer.js drawCurvedRails)
+    const cut = ic ? ic.r - RAIL_W : 0;
+    if (cut) g.drawImage(railOverlay(grp, side, cfg.wall), 0, cut, RAIL_W, PH - cut, ox, cut, RAIL_W, PH - cut);
+    else g.drawImage(railOverlay(grp, side, cfg.wall), ox, 0);
   }
   g.restore();
 }

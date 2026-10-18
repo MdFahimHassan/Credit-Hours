@@ -4,7 +4,7 @@
 import { ZONES } from './zones.js';
 import { holeBands } from './hole.js';
 import { stairwellBands, stairDepth } from './stairwell.js';
-import { railBands, curvedRailPx, roundedCornerPx, cornerBands } from './curverail.js';
+import { railBands, curvedRailPx, roundedCornerPx, cornerBands, innerCornerBands } from './curverail.js';
 import { noseBands, NOSE } from './nose.js';
 export const TILE = 32;
 
@@ -20,6 +20,7 @@ export let items = [];                       // [{x, y, collected}] in tile coor
 export let holes = [];                       // capsule-shaped openings in the floor, in PIXELS: [{x, y, w, h}] - from the zone's `holes` (tile units), see hole.js
 export let stairwells = [];                  // big stairs down to the (not yet built) lower floor, in PIXELS: [{x, y, w, h}] - from the zone's `stairwells`, see stairwell.js
 export let roundedCorners = [];               // rounded rail corners in PIXELS: [{corner: 'nw', r}] - from the zone's `roundedCorners`, see curverail.js cornerPath
+export let innerCorners = [];                 // rounded INNER rail corners in PIXELS: [{ x, r }] (north edge, tile x, row 0) - from the zone's `innerCorners`, see curverail.js innerCornerPath
 export let curvedRails = [];                 // curved west- or east-edge rails in PIXELS: [{y0, y1, depth, r, side}] - from the zone's `curvedRails` (tile units), see curverail.js
 let lawnBoxCache = null;
 export let fences = [];                      // white fences in PIXELS: [{ pts: [[x, y], ...] }] - from the zone's `fences` (tile units), see renderer.js drawFence
@@ -54,9 +55,47 @@ export function loadZone(id) {
   stairwells = (zone.stairwells ?? []).map((s) => ({ x: s.x * TILE, y: s.y * TILE, w: s.w * TILE, h: s.h * TILE, r: s.r === undefined ? undefined : s.r * TILE, sw: s.sw === undefined ? undefined : s.sw * TILE, len: s.len === undefined ? undefined : s.len * TILE }));
   curvedRails = (zone.curvedRails ?? []).map((d) => curvedRailPx(d, TILE, widthPx));
   roundedCorners = (zone.roundedCorners ?? []).map((d) => roundedCornerPx(d, TILE));
+  innerCorners = (zone.innerCorners ?? []).map((d) => ({ x: d.x * TILE, r: d.r * TILE }));
   fences = (zone.fences ?? []).map((f) => ({ pts: f.points.map(([x, y]) => [x * TILE, y * TILE]) }));
   lawnBoxCache = null;
+  fences.push(...hedgeFences(0, rows - 1, fences));                 // every hedge bed gets the white fence of zone 3 on each edge that faces open floor
   buildThinWalls();
+}
+
+// ---- white fences round the hedge beds --------------------------------------------------------------------------------
+// Every hedge / bush / tree tile (H, Y, Z) is fenced with the white balustrade of zone 3 (renderer.js drawFence) on each edge that faces open floor. The foot line of a fence sits
+// on the tile edge (north / south) or 2px inside the tile (west / east), exactly like the hand-placed ones in zones.js `fences`, so the two join up. Edges that a hand-placed fence already
+// covers are left alone. `auto: true` fences are pictures only: the hedge tile itself is already solid, so they add no extra collision. y0..y1 may be negative (the upper lawn, see virtualUp).
+const isPlantCh = (c) => c === 'H' || c === 'Y' || c === 'Z';
+export function hedgeFences(y0, y1, existing = []) {
+  const stairBed = (x, y) => zoneId === 'zone1' && y >= 0 && y <= 5 && ((x >= 3 && x <= 5) || (x >= 18 && x <= 20));   // (the two beds beside the stairs: the semi-wall and the steps count as 'open' there)
+  const tierCh = (c) => (c >= '1' && c <= '8' && c.length === 1) || c === 'm';
+  const open = (x, y, fx, fy) => { const c = getTile(x, y); return !isPlantCh(c) && c !== 'g' && c !== 'y' && c !== 'u' && c !== 'n' && (!isSolid(x, y) || (stairBed(fx, fy) && (c === 'q' || tierCh(c)))); };
+  const T = TILE, covered = (horiz, c, a, b) => existing.some((f) => f.pts.some((p, i) => {   // is [a, b] on line c already fenced by a hand-placed piece?
+    if (!i) return false; const q = f.pts[i - 1];
+    if (horiz ? q[1] !== p[1] || Math.abs(p[1] - c) > 2.5 : q[0] !== p[0] || Math.abs(p[0] - c) > 2.5) return false;
+    const lo = Math.min(horiz ? q[0] : q[1], horiz ? p[0] : p[1]), hi = Math.max(horiz ? q[0] : q[1], horiz ? p[0] : p[1]);
+    return Math.min(hi, b) - Math.max(lo, a) > 4;
+  }));
+  const H = new Map(), V = new Map();                                  // runs: key = line (y for horizontal, x for vertical) -> sorted [from, to] tile edges
+  const add = (m, key, a, b) => { if (!m.has(key)) m.set(key, []); m.get(key).push([a, b]); };
+  const W = new Set();                                                 // faces that exist: 'N|tx|ty' ...
+  for (let ty = y0; ty <= y1; ty++) for (let tx = 0; tx < cols; tx++) {
+    if (!isPlantCh(getTile(tx, ty))) continue;
+    const o = (dx, dy) => open(tx + dx, ty + dy, tx, ty);
+    if (o(0, -1) && !covered(true, ty * T, tx * T, (tx + 1) * T)) { add(H, ty * T, tx * T, (tx + 1) * T); W.add('N|' + tx + '|' + ty); }
+    if (o(0, 1) && !covered(true, (ty + 1) * T, tx * T, (tx + 1) * T)) { add(H, (ty + 1) * T, tx * T, (tx + 1) * T); W.add('S|' + tx + '|' + ty); }
+    if (o(-1, 0) && !covered(false, tx * T + 2, ty * T, (ty + 1) * T)) { add(V, tx * T + 2, ty * T, (ty + 1) * T); W.add('W|' + tx + '|' + ty); }
+    if (o(1, 0) && !covered(false, (tx + 1) * T - 2, ty * T, (ty + 1) * T)) { add(V, (tx + 1) * T - 2, ty * T, (ty + 1) * T); W.add('E|' + tx + '|' + ty); }
+  }
+  const out = [], merge = (list) => { list.sort((p, q) => p[0] - q[0]); const r = []; for (const s of list) { const l = r[r.length - 1]; if (l && s[0] <= l[1]) l[1] = Math.max(l[1], s[1]); else r.push([...s]); } return r; };
+  for (const [y, list] of H) for (const [a, b] of merge(list)) {      // horizontal runs: pull each end 2px in where a vertical fence stands there, so the corner is ONE post
+    const ty = Math.round(y / T), t0 = a / T, t1 = b / T - 1;
+    const wA = W.has('W|' + t0 + '|' + ty) || W.has('W|' + t0 + '|' + (ty - 1)), wB = W.has('E|' + t1 + '|' + ty) || W.has('E|' + t1 + '|' + (ty - 1));
+    out.push({ pts: [[a + (wA ? 2 : 0), y], [b - (wB ? 2 : 0), y]], auto: true });
+  }
+  for (const [x, list] of V) for (const [a, b] of merge(list)) out.push({ pts: [[x, a], [x, b]], auto: true });
+  return out;
 }
 
 // ---- zone 1: the lawn above the top edge --------------------------------------------------------------------------
@@ -137,7 +176,8 @@ const isRailTile = (x, y) => getTile(x, y) === 'R';
 // the tile at the zone's corner `corner` ('nw' | 'ne' | 'sw' | 'se') - where a rounded rail corner replaces the two straight pieces
 const cornerTile = (corner) => [corner[1] === 'w' ? 0 : cols - 1, corner[0] === 'n' ? 0 : rows - 1];
 export const isRoundedCornerTile = (tx, ty) => roundedCorners.some((c) => { const [cx, cy] = cornerTile(c.corner); return tx === cx && ty === cy; });
-const railHandledElsewhere = (tx, ty) => inCurvedRail(tx, ty)
+export const isInnerCornerTile = (tx, ty) => ty === 0 && innerCorners.some((c) => c.x === tx * TILE);
+const railHandledElsewhere = (tx, ty) => inCurvedRail(tx, ty) || isInnerCornerTile(tx, ty)
   || isRoundedCornerTile(tx, ty)
   || (zoneId === 'zone1' && tx >= NOSE.tx + 1 && tx < NOSE.tx + NOSE.w && ty >= NOSE.ty && ty < NOSE.ty + NOSE.h);
 // Does the player's ground strip collide with the WHOLE tile? (R tiles never do - their rails are thin walls; so are the nose tiles of the escalator)
@@ -189,6 +229,7 @@ function buildThinWalls() {
     const east = c.corner[1] === 'e', south = c.corner[0] === 's';
     thinWalls.push({ x: east ? widthPx - b.w : b.x, y: south ? heightPx - b.y - b.h : b.y, w: b.w, h: b.h });
   }
+  for (const c of innerCorners) for (const b of innerCornerBands(c.r)) thinWalls.push({ x: c.x + b.x, y: b.y, w: b.w, h: b.h });   // the rounded inner corner: solid exactly up to the quarter circle
   if (zoneId === 'zone1') thinWalls.push(...noseBands());                                          // the rounded nose of the escalator rail (nose.js)
   thinWalls.push(...mergeRects(railRects()));                                                      // every other railing 'R' tile: exactly the picture of the rail, not the whole tile
   const L = lawnBox();                                              // the white rail round the lawn: where it stops (the entrance), the end post stands up in front of the open floor - solid too
@@ -200,7 +241,7 @@ function buildThinWalls() {
     for (const o of operators) thinWalls.push({ x: o.tx * TILE + 4, y: o.ty * TILE + 4, w: TILE - 8, h: TILE - 6 });
     return;
   }
-  for (const f of fences) for (let i = 1; i < f.pts.length; i++) {  // fences: every straight piece is a thin solid wall along its foot line
+  for (const f of fences) if (!f.auto) for (let i = 1; i < f.pts.length; i++) {  // fences: every straight piece is a thin solid wall along its foot line
     const [xa, ya] = f.pts[i - 1], [xb, yb] = f.pts[i];
     if (xa === xb) thinWalls.push({ x: xa - 2, y: Math.min(ya, yb) - 2, w: 4, h: Math.abs(yb - ya) + 4 });
     else thinWalls.push({ x: Math.min(xa, xb) - 2, y: ya - 2, w: Math.abs(xb - xa) + 4, h: 4 });

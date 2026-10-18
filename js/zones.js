@@ -74,6 +74,7 @@ export const ZONES = {
   //   - rows 8-21, x 29-36: the planted bed (same H / Y / Z mix), wall on x 37
   zone1: {
     name: 'Rooftop Entry',
+    innerCorners: [{ x: 33, r: 1 }],   // the rounded INNER corner (curverail.js innerCornerPath): where the north rail (x33-37) meets the rail along the east side of the x31-32 path
     roundedCorners: [{ corner: 'ne', r: 1 }, { corner: 'se', r: 1 }],   // smooth rail corners (curverail.js): the north-east and south-east corners of the rail (the two west ones are the exit paths)
     rows: [
     "eUqHYH876SS66SS678YHYqUUkkkHHHHUURRRRR",

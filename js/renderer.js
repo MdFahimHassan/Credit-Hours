@@ -1,6 +1,6 @@
 // renderer.js - ALL drawing lives here. Game logic never touches the canvas.
-import { TILE, cols, rows, widthPx, heightPx, getTile, isSolid, items, zoneId, curvedRails, stairwells, roundedCorners, isRoundedCornerTile, inCurvedRail, lawnBox, RAIL_UP, fences } from './map.js';
-import { railPath, cornerPath, RAIL_W } from './curverail.js';
+import { TILE, cols, rows, widthPx, heightPx, getTile, isSolid, items, zoneId, curvedRails, stairwells, roundedCorners, isRoundedCornerTile, innerCorners, isInnerCornerTile, inCurvedRail, lawnBox, RAIL_UP, fences } from './map.js';
+import { railPath, cornerPath, innerCornerPath, RAIL_W } from './curverail.js';
 import { NOSE, HAT_TOP, HAT_BOT, HAT_START, HAT_TIP, TIP_R, HAT_ANGLE, HAT_HANDLE } from './nose.js';
 import { transition } from './transition.js';
 import { quest } from './quest.js';
@@ -12,7 +12,7 @@ import { drawCharacter } from './sprites.js';
 import { drawGlassFront, drawGlassTops } from './glass.js';
 import { drawStairwellInterior, drawStairwellRail } from './stairwell.js';
 import { skyline, drawSkyline, drawCurvedBays, drawCornerNotch, runOnRails } from './skyline.js';
-import { setVirtualUp, UP_ROWS, WATER_FILTERS, railEdges } from './map.js';
+import { setVirtualUp, hedgeFences, UP_ROWS, WATER_FILTERS, railEdges } from './map.js';
 import { getFloor } from './floor.js';
 import { paintHedge, hedgeBase, buildOverlay } from './foliage.js';
 import { drawPool, poolEntities, drawSignCard, signView, swimDepth, drawSwimmer } from './pool.js';
@@ -76,10 +76,11 @@ const isPlanted = (x, y) => { const c = getTile(x, y); return c === 'H' || c ===
 const rnd = (a, b, c = 0) => Math.abs(Math.sin(a * 12.9898 + b * 78.233 + c * 37.719) * 43758.5453) % 1;
 function disc(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
 
-// Zone 3: the hedge bed round the storage room is LIFTED to the level of the lawn-step landing - it sits on a low board-formed concrete semi-wall (the same one as zone 1's
+// ALL hedge beds are LIFTED (they used to be at floor level except zone 3's storage-room bed and zone 1's stair-side beds): the hedge bed round the storage room is LIFTED to the level of the lawn-step landing - it sits on a low board-formed concrete semi-wall (the same one as zone 1's
 // hedge beds). Seen from above only the wall's FRONT face shows: the south edge of the bed wherever it faces open floor (the landing and the storage room are flush with the bed).
 const WALL_H = 10;                                                 // px: height of the semi-wall's front face under the hedge
-const liftedFront = (x, y) => zoneId === 'zone3' && isPlanted(x, y) && !isPlanted(x, y + 1) && (getTile(x, y + 1) === '.' || getTile(x, y + 1) === '#');   // ('#': the east bed's south end stands against the south wall - its semi-wall face shows there too)
+const LIFT_BELOW = '.pXUR#';                                         // what a bed may stand in front of and still show its wall: open floor, the south wall, the edge rail
+const liftedFront = (x, y) => isPlanted(x, y) && !isPlanted(x, y + 1) && LIFT_BELOW.includes(getTile(x, y + 1));   // EVERY hedge bed (all zones) stands on the planter wall now   // ('#': the east bed's south end stands against the south wall - its semi-wall face shows there too)
 function paintBedWall(g, px, py, tx, ty) {
   const y = py + TILE - WALL_H;
   g.fillStyle = '#6f6d66'; g.fillRect(px, y, TILE, WALL_H);                                  // front face: same shade as the semi-wall's / tiers' risers
@@ -147,11 +148,8 @@ const isStairBed = (x, y) => zoneId === 'zone1' && y >= 0 && y <= 5 && ((x >= 3 
 const isRailable = (x, y, fx, fy) => !isPlanted(x, y) && getTile(x, y) !== 'g' && getTile(x, y) !== 'y' && getTile(x, y) !== 'u' && getTile(x, y) !== 'n' &&   /* (the lawn-step landing has its own white fence) */ (!isSolid(x, y) || (isStairBed(fx, fy) && (getTile(x, y) === 'q' || getTile(x, y) === 'm' || isTierCh(getTile(x, y)))));   // (fx, fy) = the hedge tile asking
 function drawGuardRail(px, py, tx, ty) {
   const open = (x, y) => isRailable(x, y, tx, ty);   // floor / path next to the planted area (or the wall / steps beside a stair-side bed)
-  const fenced = zoneId === 'zone3';                                           // zone 3: the north and west edges of the lifted bed carry the white fence (zones.js `fences`), level with the landing's
-  if (open(tx, ty - 1) && !fenced) railH(px, py);
-  if (open(tx, ty + 1) && !liftedFront(tx, ty)) railH(px, py + TILE - 7);   // (a bed on its semi-wall has no rail on the front: the hedge grows over the wall)
-  if (open(tx - 1, ty) && !fenced) railV(px, py, false);
-  if (open(tx + 1, ty) && !fenced) railV(px + TILE - 7, py, true);
+  // every edge of every bed carries the white fence of zone 3 now (zones.js `fences` by hand, map.js hedgeFences for the rest, drawn by drawFence): the old grey rail is gone
+  void open;
 }
 
 // ---- foliage overlay: plants growing out through / over the guard rails (painted once per zone, see foliage.js) ----------
@@ -162,7 +160,7 @@ function foliageLayer() {
     isOpen: (x, y, fx, fy) => isRailable(x, y, fx, fy) && !(liftedFront(fx, fy) && x === fx && y === fy + 1),
     isSpill: (x, y) => getTile(x, y) === 'q' || isTierCh(getTile(x, y)),   // low walls and the big steps: hedges overgrow them
     paintRail: (g, face, px, py) => {                         // the rail of one face, WITHOUT its shadow (the tile already drew that)
-      if (zoneId === 'zone3' && face !== 'S') return;                       // (N / W / E faces have the white fence instead; the S face is the semi-wall's front)
+      return;                                                               // (every face has the white fence instead, or is the planter wall's front)
       if (face === 'N') railH(px, py, g, false); else if (face === 'S') railH(px, py + TILE - 7, g, false);
       else if (face === 'W') railV(px, py, false, g, false); else railV(px + TILE - 7, py, true, g, false);
     },
@@ -277,6 +275,7 @@ function drawRunOnRail(camLeft, camRight) {
   }
 }
 function drawRail(px, py, tx, ty) {
+  if (isInnerCornerTile(tx, ty)) return;                               // the rounded inner corner: drawn by drawCurvedRails()
   if (isRoundedCornerTile(tx, ty)) return;                             // a rounded rail corner: drawn by drawCurvedRails()
   if (inCurvedRail(tx, ty)) return;                                    // part of a curved rail: drawn as one piece by drawCurvedRails()
   const seed = tx * 7 + ty;
@@ -352,6 +351,13 @@ function drawCurvedRails(time) {
     const im = curvedImgs.get(key);
     if (east) { ctx.save(); ctx.translate(widthPx, 0); ctx.scale(-1, 1); ctx.drawImage(im.cv, im.x, im.y); ctx.restore(); }   // an east bay is the west one mirrored (lit faces and slat pattern included, like the straight east rail tiles)
     else ctx.drawImage(im.cv, im.x, im.y);
+  }
+  for (const ic of innerCorners) {                                      // rounded INNER corners (curverail.js innerCornerPath): one image, 40 x 40 px round the corner tile
+    if (camera.x > ic.x + 64 || camera.x + VW < ic.x - 8 || camera.y > 40) continue;
+    const key = zoneId + '|inner|' + ic.r;
+    if (!curvedImgs.has(key)) { const Rs = ic.r - RAIL_W; curvedImgs.set(key, buildCurvedRail({ y0: -Rs, y1: RAIL_W, depth: Rs, r: Rs }, innerCornerPath(ic.r))); }
+    const im = curvedImgs.get(key);
+    ctx.drawImage(im.cv, ic.x + im.x, im.y);
   }
   for (const rc of roundedCorners) {                                    // rounded rail corners: the NW picture (a quarter circle in tile (0,0)), mirrored for the other corners
     const east = rc.corner[1] === 'e', south = rc.corner[0] === 's', span = rc.r + RAIL_W;
@@ -1018,7 +1024,7 @@ function drawPoolRim(px, py, tx, ty) {
 // Tiles that stand on the grey stone paving (see floor.js). Everything else keeps its flat colour from COLORS.
 const STONE_FLOOR = '.pXURCTaoc12345678mV';
 function drawTile(ch, px, py, tx, ty, time) {
-  if (STONE_FLOOR.includes(ch)) {
+  if (STONE_FLOOR.includes(ch) || isInnerCornerTile(tx, ty)) {   // (the inner rail corner's tile: the floor shows where the rail is rounded off)
     ctx.drawImage(getFloor(zoneId, cols, rows), px, py, TILE, TILE, px, py, TILE, TILE);   // 32x32 piece of the pre-painted stone floor
   } else {
     ctx.fillStyle = COLORS[ch];
@@ -1491,6 +1497,7 @@ function drawUpperLawn(time) {
     if (ch === '.') ctx.drawImage(getFloor(zoneId, cols, rows), tx * TILE, (7 + ((-ty - 1) % 2)) * TILE, TILE, TILE, tx * TILE, ty * TILE, TILE, TILE);   // plain paving: the same slabs as rows 7-8
     else drawTile(ch, tx * TILE, ty * TILE, tx, ty, time);
   }
+  for (const f of hedgeFences(ty0, -1)) if (f.pts[0][0] < LAWN_X1) drawFence(f.pts);   // the fences round the upper hedge beds (no depth sorting: nobody can walk up there)
   setVirtualUp(false);
   const gx0 = tx0 * TILE, gw = (tx1 + 1) * TILE - gx0, top = ty0 * TILE;
   const fg = ctx.createLinearGradient(0, 0, 0, -LAWN_FADE_PX);
@@ -1536,7 +1543,8 @@ export function render(game, time) {
   const ents = [];                                    // (zone 2 adds the pool signboard and the two operators here)
   if (npc.zone === zoneId) ents.push({ y: npc.footY, draw: () => drawNPC(npc, player) });
   if (zoneId === 'zone2') ents.push(...poolEntities(ctx, time));
-  if (zoneId === 'zone3') ents.push(...lawnRailEntities(x0, x1, y0, y1), ...fenceEntities(camera));   // the white lawn rail (drawn over a player standing north of it)
+  ents.push(...fenceEntities(camera));                                             // the white fences round the hedge beds (every zone)
+  if (zoneId === 'zone3') ents.push(...lawnRailEntities(x0, x1, y0, y1));   // the white lawn rail (drawn over a player standing north of it)
   ents.push({ y: player.y + player.h, draw: () => drawPlayer(player) });
   ents.sort((a, b) => a.y - b.y);                     // stable: on a tie the player is drawn last
   for (const e of ents) e.draw();

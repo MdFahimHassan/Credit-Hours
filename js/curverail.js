@@ -67,6 +67,28 @@ export function cornerPath(R) {
   return { pts, len: total };
 }
 
+// The INNER corner of a path rail (zone 1, x33): the north edge rail runs east from tile x, a path rail runs NORTH from the edge along the WEST side of that tile (floor to the west and south).
+// Where they meet the floor makes a 270 degree corner, which is rounded like the other corners: the SKYLINE face of the rail is a quarter circle of radius Rs = r - RAIL_W, the FLOOR face a
+// concentric quarter circle of radius r (r = 1 tile -> the same centre line as the NE corner). Frame: origin = top-left of the tile (x0, 0); the path rail's outer face is at X = RAIL_W,
+// the north rail's outer face at Y = 0, centre (RAIL_W + Rs, -Rs). The path runs from the north rail (heading WEST) round to the path rail (heading NORTH); inward normal (ty, -tx), as in railPath.
+export function innerCornerPath(r) {
+  const Rs = r - RAIL_W, cx = RAIL_W + Rs, cy = -Rs, total = PI / 2 * Rs, K = Math.max(2, Math.ceil(total / STEP)), pts = [];
+  for (let k = 0; k <= K; k++) {
+    const a = PI / 2 + (PI / 2) * (k / K);
+    pts.push({ x: cx + Rs * Math.cos(a), y: cy + Rs * Math.sin(a), tx: -Math.sin(a), ty: Math.cos(a) });
+  }
+  return { pts, len: total, Rs };
+}
+// solid rows of the corner tile: from the floor face of the arc to the tile's east edge (the north rail goes on from there), in 2px rows, tile-local pixels
+export function innerCornerBands(r, step = 2) {
+  const Rs = r - RAIL_W, cx = RAIL_W + Rs, out = [];
+  for (let y = 0; y < RAIL_W; y += step) {
+    const dy = y + step / 2 + Rs, xl = dy >= r ? cx : cx - Math.sqrt(r * r - dy * dy);
+    out.push({ x: xl - 0.25, y, w: cx - xl + 0.25 + (32 - cx), h: step + 0.01 });
+  }
+  return out;
+}
+
 // x of the rail's outer face at height y (px), 0 outside the curve. (The face is monotone in y, so this is a binary search.)
 export function faceX(c, y, path = railPath(c)) {
   const { pts } = path;
