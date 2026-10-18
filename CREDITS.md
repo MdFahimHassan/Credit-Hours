@@ -34,5 +34,3 @@ To finish the credits:
    Credits screen (press **C**). The LPC project asks that credits be reasonably easy for players to find.
 
 Note: CC-BY-SA is "share-alike", meaning edited versions of the art should be shared under the same license.
-If you plan to publish or sell the game, check the licenses listed in your credits file first.
-(This is general information, not legal advice.) 
