@@ -343,6 +343,8 @@ function drawBelow(ctx, time, camera, VW, VH, bb, laneLines = true) {
   const list = [];
   for (const p of people) {
     if (Math.abs(p.x + px) > bb.w / 2 + 24 || Math.abs(p.y + py) > bb.h / 2 + 24) continue;   // not near the glass
+    const wx = ox + p.x, wy = oy + p.y;                                                         // ...or not on the screen at all (a big skylight / hole only shows part of its crowd)
+    if (wx < camera.x - 24 || wx > camera.x + VW + 24 || wy < camera.y - 24 || wy > camera.y + VH + 48) continue;
     list.push(p);
   }
   list.sort((a, b) => a.y - b.y);
@@ -360,16 +362,26 @@ function drawBelow(ctx, time, camera, VW, VH, bb, laneLines = true) {
 
 // Holes (hole.js): every hole looks down onto its OWN patch of lower floor with its own crowd (a single crowd spread over the whole zone would leave them empty).
 let holeCrowds = [];
+function ensureHoleCrowds() {
+  if (crowdZone === zoneId) return;
+  holeCrowds = holes.map((h) => {
+    const bb = { x: h.x, y: h.y, w: h.w, h: h.h, cx: h.x + h.w / 2, cy: h.y + h.h / 2 };
+    const count = Math.max(8, Math.round(((bb.w + 2 * HOLE_MARGIN) * (bb.h + 2 * HOLE_MARGIN) / 1000) * HOLE_DENSITY));
+    buildCrowd(bb, count, HOLE_MARGIN);
+    return { bb, phone: PHONE_COUNT, sizes: GROUP_SIZES, target: GROUP_TARGET, people, groups, world, formT };
+  });
+  crowdZone = zoneId; lastTime = null;
+}
+// builds the crowd + the lower-floor pattern ahead of time, behind the black screen (see warmup.js)
+export function warmGlass(ctx) {
+  scan();
+  if (!bbox) return;
+  if (!floorPattern) floorPattern = makeFloorPattern(ctx);
+  if (holeClip) ensureHoleCrowds();
+  else if (crowdZone !== zoneId) { buildCrowd(); crowdZone = zoneId; lastTime = null; }
+}
 function drawHoles(ctx, time, camera, VW, VH) {
-  if (crowdZone !== zoneId) {
-    holeCrowds = holes.map((h) => {
-      const bb = { x: h.x, y: h.y, w: h.w, h: h.h, cx: h.x + h.w / 2, cy: h.y + h.h / 2 };
-      const count = Math.max(8, Math.round(((bb.w + 2 * HOLE_MARGIN) * (bb.h + 2 * HOLE_MARGIN) / 1000) * HOLE_DENSITY));
-      buildCrowd(bb, count, HOLE_MARGIN);
-      return { bb, phone: PHONE_COUNT, sizes: GROUP_SIZES, target: GROUP_TARGET, people, groups, world, formT };
-    });
-    crowdZone = zoneId; lastTime = null;
-  }
+  ensureHoleCrowds();
   const dt = lastTime == null ? 0 : Math.min(0.05, Math.max(0, time - lastTime));
   lastTime = time;
   holes.forEach((h, i) => {

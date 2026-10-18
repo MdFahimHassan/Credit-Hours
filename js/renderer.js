@@ -7,21 +7,88 @@ import { quest } from './quest.js';
 import { dialogue } from './dialogue.js';
 import { restroom } from './restroom.js';
 import { intro } from './intro.js';
-import { drawWell, wellBox, wellTiles } from './escalator.js';
-import { drawCharacter } from './sprites.js';
-import { drawGlassFront, drawGlassTops } from './glass.js';
-import { drawStairwellInterior, drawStairwellRail } from './stairwell.js';
-import { skyline, drawSkyline, drawCurvedBays, drawCornerNotch, runOnRails } from './skyline.js';
+import { drawWell, wellBox, wellTiles, warmWell } from './escalator.js';
+import { drawCharacter, warmSprites } from './sprites.js';
+import { warmup } from './warmup.js';
+import { drawGlassFront, drawGlassTops, warmGlass } from './glass.js';
+import { drawStairwellInterior, drawStairwellRail, warmStairwell } from './stairwell.js';
+import { skyline, drawSkyline, drawCurvedBays, drawCornerNotch, runOnRails, skylineWarmTasks } from './skyline.js';
 import { setVirtualUp, hedgeFences, UP_ROWS, WATER_FILTERS, railEdges } from './map.js';
 import { getFloor } from './floor.js';
 import { paintHedge, hedgeBase, buildOverlay } from './foliage.js';
-import { drawPool, poolEntities, drawSignCard, signView, swimDepth, drawSwimmer } from './pool.js';
+import { drawPool, warmPool, poolEntities, drawSignCard, signView, swimDepth, drawSwimmer } from './pool.js';
 import { paintLeafMass, massBase, drawCrown } from './canopy.js';
 
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
-ctx.imageSmoothingEnabled = false;           // crisp pixels
+const screenCtx = canvas.getContext('2d');
+screenCtx.imageSmoothingEnabled = false;     // crisp pixels
+let ctx = screenCtx;                         // every draw function below paints into `ctx`. bakeTo() points it at an offscreen canvas for a moment, so the
+                                             // same code can paint a picture ONCE (tile chunks, fences...) that is then stamped every frame
 const VW = canvas.width, VH = canvas.height;  // viewport size in pixels
+
+// ---- baked pictures: paint once with the normal draw code, stamp every frame --------------------------------------------------------------
+// bakeTo(w, h, ox, oy, fn): runs fn() with `ctx` = a fresh w x h canvas whose top-left is the world point (ox, oy), and returns that canvas.
+function bakeTo(w, h, ox, oy, fn) {
+  const c = document.createElement('canvas'); c.width = Math.ceil(w); c.height = Math.ceil(h);
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.translate(-ox, -oy);
+  const prev = ctx; ctx = g;
+  try { fn(); } finally { ctx = prev; }
+  return c;
+}
+// Everything that stands still on the floor (the whole tile pass: floor, walls, rails, hedges, benches, doors...) is painted in 8 x 8 tile chunks the first time
+// they are needed and then blitted: ~300 tiles x dozens of fillRects per frame became 4-6 drawImage calls. Each chunk is painted with a 1-tile margin of
+// neighbouring tiles in the normal row order, so pieces that overhang their tile come out exactly as before. Only the current zone's chunks are kept.
+const CHUNK_T = 8, CHUNK_PX = CHUNK_T * TILE;
+let chunkZone = null; const chunks = new Map();
+// A chunk is painted row by row (a few rows per frame for chunks that are not needed yet, all at once for one that is on screen), always in the normal
+// row order, so the result is the same however it was split up.
+function newChunk(cx, cy) {
+  const tx0 = cx * CHUNK_T, ty0 = cy * CHUNK_T;
+  const cv = document.createElement('canvas'); cv.width = CHUNK_PX; cv.height = CHUNK_PX;
+  const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.translate(-tx0 * TILE, -ty0 * TILE);
+  return { cv, g, tx0, ty0, ty: Math.max(0, ty0 - 1), end: Math.min(rows - 1, ty0 + CHUNK_T), done: false };
+}
+function paintChunk(st, budgetMs) {                      // paints rows until done or `budgetMs` is used up (always at least one row)
+  const t0 = performance.now(), prev = ctx; ctx = st.g;
+  try {
+    while (st.ty <= st.end) {
+      for (let tx = Math.max(0, st.tx0 - 1); tx <= Math.min(cols - 1, st.tx0 + CHUNK_T); tx++) drawTile(getTile(tx, st.ty), tx * TILE, st.ty * TILE, tx, st.ty, 0);
+      st.ty++;
+      if (performance.now() - t0 >= budgetMs) break;
+    }
+  } finally { ctx = prev; }
+  st.done = st.ty > st.end;
+  return st.done;
+}
+function chunkAt(cx, cy) {
+  if (chunkZone !== zoneId) { chunks.clear(); chunkZone = zoneId; spareKey = ''; }
+  const key = cy * 1024 + cx;
+  let st = chunks.get(key);
+  if (!st) chunks.set(key, st = newChunk(cx, cy));
+  if (!st.done) paintChunk(st, Infinity);
+  return st.cv;
+}
+function drawTileChunks(x0, x1, y0, y1) {                 // x0..y1 = the visible tile range
+  for (let cy = Math.floor(y0 / CHUNK_T); cy <= Math.floor(y1 / CHUNK_T); cy++)
+    for (let cx = Math.floor(x0 / CHUNK_T); cx <= Math.floor(x1 / CHUNK_T); cx++)
+      ctx.drawImage(chunkAt(cx, cy), cx * CHUNK_PX, cy * CHUNK_PX);
+}
+// While nothing else is going on, paint the chunks round the visible area ahead of time (2 ms per frame), so walking into new ground never has to paint it on the spot.
+let spare = [], spareKey = '';
+function bakeNeighbour(x0, x1, y0, y1) {
+  if (chunkZone !== zoneId) return;
+  const cx0 = Math.floor(x0 / CHUNK_T) - 1, cx1 = Math.floor(x1 / CHUNK_T) + 1, cy0 = Math.floor(y0 / CHUNK_T) - 1, cy1 = Math.floor(y1 / CHUNK_T) + 1;
+  const key = zoneId + '|' + cx0 + ',' + cy0 + ',' + cx1 + ',' + cy1;
+  if (key !== spareKey) { spareKey = key; spare = []; for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) if (cx >= 0 && cy >= 0 && cx * CHUNK_T < cols && cy * CHUNK_T < rows) spare.push([cx, cy]); }
+  while (spare.length) {
+    const [cx, cy] = spare[spare.length - 1], k = cy * 1024 + cx;
+    let st = chunks.get(k);
+    if (!st) chunks.set(k, st = newChunk(cx, cy));
+    if (st.done || paintChunk(st, 2)) { spare.pop(); continue; }
+    return;                                              // still painting this one: carry on next frame
+  }
+}
+
 
 const camera = { x: 0, y: 0 };
 
@@ -71,7 +138,7 @@ function drawBlobs(px, py, a) {                       // two leafy bush blobs (a
 
 // ---- planted areas: H = clipped hedge, Y = bush mound, Z = tree -----------------------------------------
 // All three are solid. Leaf positions come from tx/ty (no random flicker). A pale guard rail is drawn
-// automatically on every edge that faces open floor (see drawGuardRail), like the hedges in the real photos.
+// automatically on every edge that faces open floor (white fences, see map.js hedgeFences), like the hedges in the real photos.
 const isPlanted = (x, y) => { const c = getTile(x, y); return c === 'H' || c === 'Y' || c === 'Z'; };
 const rnd = (a, b, c = 0) => Math.abs(Math.sin(a * 12.9898 + b * 78.233 + c * 37.719) * 43758.5453) % 1;
 function disc(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
@@ -123,34 +190,12 @@ function drawPlanted(ch, px, py, tx, ty) {
     plantCache.set(key, c);
   }
   ctx.drawImage(c, px, py);
-  drawGuardRail(px, py, tx, ty);
 }
 
-// Pale grey safety rail for planted areas (NOT the dark two-bar roof railing): a slim handrail on top,
-// thin vertical balusters under it, and a post at each end of every tile. Drawn on every open face.
-const RAIL = { hand: '#d6dadd', bal: '#98a0a5', post: '#eceff1', shadow: 'rgba(0,0,0,0.28)' };
-function railH(x, y, g = ctx, sh = true) {                // horizontal rail segment (top / bottom faces); g = target, sh = draw the soft shadow line
-  if (sh) { g.fillStyle = RAIL.shadow; g.fillRect(x, y + 6, TILE, 1); }
-  g.fillStyle = RAIL.bal; for (let i = 3; i < TILE - 2; i += 4) g.fillRect(x + i, y + 3, 1, 4);
-  g.fillStyle = RAIL.hand; g.fillRect(x, y + 1, TILE, 2);
-  g.fillStyle = RAIL.post; g.fillRect(x, y, 2, 7); g.fillRect(x + TILE - 2, y, 2, 7);
-}
-function railV(x, y, east, g = ctx, sh = true) {          // vertical rail segment (left / right faces)
-  const hx = east ? x + 4 : x + 1, bx = east ? x + 1 : x + 3;
-  if (sh) { g.fillStyle = RAIL.shadow; g.fillRect(east ? x : x + 6, y, 1, TILE); }
-  g.fillStyle = RAIL.bal; for (let i = 3; i < TILE - 2; i += 4) g.fillRect(bx, y + i, 3, 1);
-  g.fillStyle = RAIL.hand; g.fillRect(hx, y, 2, TILE);
-  g.fillStyle = RAIL.post; g.fillRect(x, y, 7, 2); g.fillRect(x, y + TILE - 2, 7, 2);
-}
 // The two hedge beds beside the stairs (zone 1, rows 0-5: x3-5 and x18-20) sit against the semi-wall and the steps, which are solid, so they
 // used to get no guard rail. A rail is now drawn on those faces too (same rail as every other hedge). The top edge (map edge) stays open.
 const isStairBed = (x, y) => zoneId === 'zone1' && y >= 0 && y <= 5 && ((x >= 3 && x <= 5) || (x >= 18 && x <= 20));
 const isRailable = (x, y, fx, fy) => !isPlanted(x, y) && getTile(x, y) !== 'g' && getTile(x, y) !== 'y' && getTile(x, y) !== 'u' && getTile(x, y) !== 'n' &&   /* (the lawn-step landing has its own white fence) */ (!isSolid(x, y) || (isStairBed(fx, fy) && (getTile(x, y) === 'q' || getTile(x, y) === 'm' || isTierCh(getTile(x, y)))));   // (fx, fy) = the hedge tile asking
-function drawGuardRail(px, py, tx, ty) {
-  const open = (x, y) => isRailable(x, y, tx, ty);   // floor / path next to the planted area (or the wall / steps beside a stair-side bed)
-  // every edge of every bed carries the white fence of zone 3 now (zones.js `fences` by hand, map.js hedgeFences for the rest, drawn by drawFence): the old grey rail is gone
-  void open;
-}
 
 // ---- foliage overlay: plants growing out through / over the guard rails (painted once per zone, see foliage.js) ----------
 const foliageLayers = {};
@@ -159,11 +204,7 @@ function foliageLayer() {
     zoneId, cols, rows, widthPx, heightPx, getTile, isPlanted,
     isOpen: (x, y, fx, fy) => isRailable(x, y, fx, fy) && !(liftedFront(fx, fy) && x === fx && y === fy + 1),
     isSpill: (x, y) => getTile(x, y) === 'q' || isTierCh(getTile(x, y)),   // low walls and the big steps: hedges overgrow them
-    paintRail: (g, face, px, py) => {                         // the rail of one face, WITHOUT its shadow (the tile already drew that)
-      return;                                                               // (every face has the white fence instead, or is the planter wall's front)
-      if (face === 'N') railH(px, py, g, false); else if (face === 'S') railH(px, py + TILE - 7, g, false);
-      else if (face === 'W') railV(px, py, false, g, false); else railV(px + TILE - 7, py, true, g, false);
-    },
+    paintRail: () => {},                                      // (every face has the white fence instead, or is the planter wall's front: no grey rail to paint)
   });
   return foliageLayers[zoneId];
 }
@@ -340,23 +381,29 @@ function buildCurvedRail(c, path = railPath(c)) {
   for (let j = 1; j < posts; j++) { const s0 = len * j / posts - 1.5 * u; from(s0, s0 + 3 * u, 0, 16, RC.post); from(s0 + 2 * u, s0 + 3 * u, 0, 16, RC.dark); }
   return { cv, x: -ox, y: -oy };
 }
+const curvedImg = (c) => { const key = zoneId + '|' + c.side + '|' + c.y0; if (!curvedImgs.has(key)) curvedImgs.set(key, buildCurvedRail(c)); return curvedImgs.get(key); };
+const innerImg = (ic) => { const key = zoneId + '|inner|' + ic.r; if (!curvedImgs.has(key)) { const Rs = ic.r - RAIL_W; curvedImgs.set(key, buildCurvedRail({ y0: -Rs, y1: RAIL_W, depth: Rs, r: Rs }, innerCornerPath(ic.r))); } return curvedImgs.get(key); };
+const cornerImg = (rc) => { const key = zoneId + '|corner|nw'; if (!curvedImgs.has(key)) curvedImgs.set(key, buildCurvedRail({ y0: 0, y1: rc.r, depth: rc.r, r: rc.r }, cornerPath(rc.r))); return curvedImgs.get(key); };
+function warmCurvedRails() {                                            // (these cost tens of ms each: built behind the black screen, see warmup.js)
+  const tasks = [];
+  for (const c of curvedRails) tasks.push(() => { curvedImg(c); });
+  for (const ic of innerCorners) tasks.push(() => { innerImg(ic); });
+  for (const rc of roundedCorners) tasks.push(() => { cornerImg(rc); });
+  return tasks;
+}
 function drawCurvedRails(time) {
   for (const c of curvedRails) {
     const east = c.side === 'e';
     if (c.y0 > camera.y + VH || c.y1 < camera.y) continue;
     if (east ? camera.x + VW < widthPx - c.depth - RAIL_W : camera.x > c.depth + RAIL_W) continue;
     drawCurvedBays(ctx, camera, VW, VH, time, c);                       // the skyline outside the curve (over the floor tiles under it)
-    const key = zoneId + '|' + c.side + '|' + c.y0;
-    if (!curvedImgs.has(key)) curvedImgs.set(key, buildCurvedRail(c));
-    const im = curvedImgs.get(key);
+    const im = curvedImg(c);
     if (east) { ctx.save(); ctx.translate(widthPx, 0); ctx.scale(-1, 1); ctx.drawImage(im.cv, im.x, im.y); ctx.restore(); }   // an east bay is the west one mirrored (lit faces and slat pattern included, like the straight east rail tiles)
     else ctx.drawImage(im.cv, im.x, im.y);
   }
   for (const ic of innerCorners) {                                      // rounded INNER corners (curverail.js innerCornerPath): one image, 40 x 40 px round the corner tile
     if (camera.x > ic.x + 64 || camera.x + VW < ic.x - 8 || camera.y > 40) continue;
-    const key = zoneId + '|inner|' + ic.r;
-    if (!curvedImgs.has(key)) { const Rs = ic.r - RAIL_W; curvedImgs.set(key, buildCurvedRail({ y0: -Rs, y1: RAIL_W, depth: Rs, r: Rs }, innerCornerPath(ic.r))); }
-    const im = curvedImgs.get(key);
+    const im = innerImg(ic);
     ctx.drawImage(im.cv, ic.x + im.x, im.y);
   }
   for (const rc of roundedCorners) {                                    // rounded rail corners: the NW picture (a quarter circle in tile (0,0)), mirrored for the other corners
@@ -364,9 +411,7 @@ function drawCurvedRails(time) {
     if (east ? camera.x + VW < widthPx - span : camera.x > span) continue;
     if (south ? camera.y + VH < heightPx - span : camera.y > span) continue;
     drawCornerNotch(ctx, time, rc.r, rc.corner);
-    const key = zoneId + '|corner|nw';
-    if (!curvedImgs.has(key)) curvedImgs.set(key, buildCurvedRail({ y0: 0, y1: rc.r, depth: rc.r, r: rc.r }, cornerPath(rc.r)));
-    const im = curvedImgs.get(key);
+    const im = cornerImg(rc);
     ctx.save();
     ctx.translate(east ? widthPx : 0, south ? heightPx : 0); ctx.scale(east ? -1 : 1, south ? -1 : 1);   // a mirrored east / south corner keeps the lit faces and the slat pattern of the straight east / south rail tiles
     ctx.drawImage(im.cv, im.x, im.y);
@@ -777,7 +822,16 @@ function lawnRailEntities(x0, x1, y0, y1) {
     if (lawnWall(tx, ty)) out.push({ y: (ty + 1) * TILE, draw: () => drawLawnRail(tx * TILE, ty * TILE, tx, ty) });
   return out;
 }
-function drawLawnRail(px, py, tx, ty) {
+const pieceCache = new Map();                                                 // small baked pictures (one fence piece / one lawn-rail tile), see bakeTo()
+function drawBaked(key, ox, oy, w, h, paint) {
+  let c = pieceCache.get(key);
+  if (!c) pieceCache.set(key, c = bakeTo(w, h, ox, oy, paint));
+  ctx.drawImage(c, ox, oy);
+}
+function drawLawnRail(px, py, tx, ty) {                                       // (static: painted once per tile, then stamped)
+  drawBaked(zoneId + '|lr|' + tx + '|' + ty, px - 8, py - RAIL_UP - 6, TILE + 16, TILE + RAIL_UP + 12, () => paintLawnRail(px, py, tx, ty));
+}
+function paintLawnRail(px, py, tx, ty) {
   const L = lawnBox(), W = '#eef0f2', W2 = '#c9ced3', SH = 'rgba(20,24,30,0.30)';
   const post = (x, y) => {                                                       // a square post (x = left edge, y = foot): lit face, shaded side, flat cap
     ctx.fillStyle = SH; ctx.fillRect(x - 1, y, 6, 2);
@@ -820,7 +874,11 @@ function drawLawnRail(px, py, tx, ty) {
 
 // ---- free-standing white fences (zone 3 `fences`: e.g. round the landing at the top of the lawn steps) ----------------------------------------------------------
 // The same white aluminium rail as the lawn's, drawn along a chain of points (the foot line): posts at the ends and every 64px, balusters every 16px, a top rail.
-function drawFence(pts) {
+function drawFence(pts) {                                                     // (static: each straight piece is painted once, then stamped)
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]), x0 = Math.min(...xs) - 6, y0 = Math.min(...ys) - RAIL_UP - 4;
+  drawBaked(zoneId + '|f|' + pts.join(';'), x0, y0, Math.max(...xs) + 8 - x0, Math.max(...ys) + 6 - y0, () => paintFence(pts));
+}
+function paintFence(pts) {
   const W = '#eef0f2', W2 = '#c9ced3', SH = 'rgba(20,24,30,0.30)';
   const post = (x, y) => { ctx.fillStyle = SH; ctx.fillRect(x - 1, y, 6, 2); ctx.fillStyle = W2; ctx.fillRect(x, y - RAIL_UP, 4, RAIL_UP); ctx.fillStyle = W; ctx.fillRect(x, y - RAIL_UP, 2, RAIL_UP); ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 0.5, y - RAIL_UP - 1, 5, 2); };
   const bar = (x, y) => { ctx.fillStyle = W2; ctx.fillRect(x, y - RAIL_UP, 2, RAIL_UP); ctx.fillStyle = W; ctx.fillRect(x, y - RAIL_UP, 1, RAIL_UP); };
@@ -844,11 +902,13 @@ function drawFence(pts) {
     }
   }
 }
+const fenceBounds = new WeakMap();                                           // a fence never changes: its bounding box is worked out once
 function fenceEntities(camera) {
   const out = [];
   for (const f of fences) {
-    const xs = f.pts.map((p) => p[0]), ys = f.pts.map((p) => p[1]);
-    if (Math.max(...xs) + 8 < camera.x || Math.min(...xs) - 8 > camera.x + VW || Math.max(...ys) + 8 < camera.y || Math.min(...ys) - 24 > camera.y + VH) continue;
+    let b = fenceBounds.get(f);
+    if (!b) { const xs = f.pts.map((p) => p[0]), ys = f.pts.map((p) => p[1]); fenceBounds.set(f, b = { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) }); }
+    if (b.x1 + 8 < camera.x || b.x0 - 8 > camera.x + VW || b.y1 + 8 < camera.y || b.y0 - 24 > camera.y + VH) continue;
     // depth: the fence is drawn over a player standing north of it and under one standing on its south / inner side (the top of the fence for a vertical piece)
     for (let i = 1; i < f.pts.length; i++) out.push({ y: f.pts[i - 1][0] === f.pts[i][0] ? Math.min(f.pts[i - 1][1], f.pts[i][1]) + 2 : f.pts[i][1] + 1, draw: () => drawFence([f.pts[i - 1], f.pts[i]]) });
   }
@@ -974,7 +1034,7 @@ function drawBasementBlock(camera, BLOCK) {
     ctx.moveTo(ix1 - 2.5 - k(ya), ya); ctx.lineTo(ix1 - 2.5 - k(yb), yb); ctx.stroke();
   });
   R(ix0, it, 3, ih, 'rgba(0,0,0,0.30)'); R(ix1 - 3, it, 3, ih, 'rgba(0,0,0,0.30)');     // shaded side walls
-  ctx.drawImage(getFloor(zoneId, cols, rows), bx + (BLOCK.mirror ? 96 - ix1 : ix0), FY ? by : by + FLOOR_Y, iw, 96 - FLOOR_Y, ix0, FLOOR_Y, iw, 96 - FLOOR_Y);   // landing: the same stone paving as the floor
+  ctx.drawImage(getFloor(zoneId, cols, rows, bx + (BLOCK.mirror ? 96 - ix1 : ix0), FY ? by : by + FLOOR_Y, iw, 96 - FLOOR_Y), bx + (BLOCK.mirror ? 96 - ix1 : ix0), FY ? by : by + FLOOR_Y, iw, 96 - FLOOR_Y, ix0, FLOOR_Y, iw, 96 - FLOOR_Y);   // landing: the same stone paving as the floor
   R(ix0, FLOOR_Y, iw, 1, '#cfd3d6');                                                    // metal edge strip at the drop
   ctx.restore();
   if (BLOCK.extinguisher) drawExtinguisher(BLOCK.extinguisher.x, BLOCK.extinguisher.y);
@@ -1025,7 +1085,7 @@ function drawPoolRim(px, py, tx, ty) {
 const STONE_FLOOR = '.pXURCTaoc12345678mV';
 function drawTile(ch, px, py, tx, ty, time) {
   if (STONE_FLOOR.includes(ch) || isInnerCornerTile(tx, ty)) {   // (the inner rail corner's tile: the floor shows where the rail is rounded off)
-    ctx.drawImage(getFloor(zoneId, cols, rows), px, py, TILE, TILE, px, py, TILE, TILE);   // 32x32 piece of the pre-painted stone floor
+    ctx.drawImage(getFloor(zoneId, cols, rows, px, py, TILE, TILE), px, py, TILE, TILE, px, py, TILE, TILE);   // 32x32 piece of the pre-painted stone floor
   } else {
     ctx.fillStyle = COLORS[ch];
     ctx.fillRect(px, py, TILE, TILE);
@@ -1518,7 +1578,7 @@ function drawUpperLawn(time) {
   setVirtualUp(true);
   for (let ty = ty0; ty <= -1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
     const ch = getTile(tx, ty);
-    if (ch === '.') ctx.drawImage(getFloor(zoneId, cols, rows), tx * TILE, (7 + ((-ty - 1) % 2)) * TILE, TILE, TILE, tx * TILE, ty * TILE, TILE, TILE);   // plain paving: the same slabs as rows 7-8
+    if (ch === '.') ctx.drawImage(getFloor(zoneId, cols, rows, tx * TILE, (7 + ((-ty - 1) % 2)) * TILE, TILE, TILE), tx * TILE, (7 + ((-ty - 1) % 2)) * TILE, TILE, TILE, tx * TILE, ty * TILE, TILE, TILE);   // plain paving: the same slabs as rows 7-8
     else drawTile(ch, tx * TILE, ty * TILE, tx, ty, time);
   }
   for (const f of hedgeFences(ty0, -1)) if (f.pts[0][0] < LAWN_X1) drawFence(f.pts);   // the fences round the upper hedge beds (no depth sorting: nobody can walk up there)
@@ -1530,7 +1590,37 @@ function drawUpperLawn(time) {
   if (top < -LAWN_FADE_PX) { ctx.fillStyle = '#000'; ctx.fillRect(gx0, top, gw, -LAWN_FADE_PX - top); }
 }
 
+// Everything the new zone needs that is expensive to paint, as small tasks (see warmup.js). `points` = world positions the camera will be looking at first.
+export function zoneWarmTasks(points) {
+  const tasks = [() => warmSprites(), () => warmGlass(screenCtx), () => warmPool(screenCtx)];
+  for (const s of stairwells) tasks.push(() => warmStairwell(s));
+  tasks.push(...skylineWarmTasks());
+  tasks.push(...warmCurvedRails());
+  tasks.push(() => { foliageLayer(); });                                         // the foliage over the hedge rails: one picture of the whole zone
+  if (zoneId === 'zone1') tasks.push(() => { if (!noseImg) noseImg = buildNose(); }, warmWell, () => { drawWellLayer(0); });
+  const seen = new Set();
+  for (const p of points) {                                                       // the tile chunks round the first view (and the floor under them)
+    const tx = Math.floor(p.x / TILE), ty = Math.floor(p.y / TILE);
+    for (let cy = Math.max(0, Math.floor((ty - 9) / CHUNK_T)); cy <= Math.min(Math.floor((rows - 1) / CHUNK_T), Math.floor((ty + 9) / CHUNK_T)); cy++)
+      for (let cx = Math.max(0, Math.floor((tx - 12) / CHUNK_T)); cx <= Math.min(Math.floor((cols - 1) / CHUNK_T), Math.floor((tx + 12) / CHUNK_T)); cx++)
+        if (!seen.has(cy * 1024 + cx)) { seen.add(cy * 1024 + cx); tasks.push(() => { chunkAt(cx, cy); }); }
+  }
+  return tasks;
+}
+
+function drawLoading() {                                                         // black screen while a zone's pictures are painted (warmup.js)
+  screenCtx.fillStyle = '#000'; screenCtx.fillRect(0, 0, VW, VH);
+  if (warmup.t > 0.25) {                                                          // (only if it takes a moment, so a quick load does not flash text)
+    screenCtx.font = '14px monospace'; screenCtx.fillStyle = 'rgba(255,255,255,0.7)'; screenCtx.textAlign = 'center';
+    screenCtx.fillText('Loading' + '.'.repeat(1 + Math.floor(warmup.t * 3) % 3), VW / 2, VH / 2);
+    screenCtx.fillStyle = 'rgba(255,255,255,0.25)'; screenCtx.fillRect(VW / 2 - 60, VH / 2 + 14, 120, 3);
+    screenCtx.fillStyle = 'rgba(255,255,255,0.7)'; screenCtx.fillRect(VW / 2 - 60, VH / 2 + 14, 120 * warmup.progress, 3);
+    screenCtx.textAlign = 'start';
+  }
+}
+
 export function render(game, time) {
+  if (warmup.active) { drawLoading(); return; }
   const { player, npc, debug } = game;
   updateCamera(player);
   ctx.clearRect(0, 0, VW, VH);
@@ -1542,9 +1632,8 @@ export function render(game, time) {
   // Only draw tiles that are on screen (cheap "culling"); max/min keep us inside the map when the camera slides past an edge
   const x0 = Math.max(0, Math.floor(camera.x / TILE)), x1 = Math.min(cols - 1, Math.floor((camera.x + VW) / TILE));
   const y0 = Math.max(0, Math.floor(camera.y / TILE)), y1 = Math.min(rows - 1, Math.floor((camera.y + VH) / TILE));
-  for (let ty = y0; ty <= y1; ty++)
-    for (let tx = x0; tx <= x1; tx++)
-      drawTile(getTile(tx, ty), tx * TILE, ty * TILE, tx, ty, time);
+  drawTileChunks(x0, x1, y0, y1);                    // the static tile pass, from the chunk cache (see above)
+  bakeNeighbour(x0, x1, y0, y1);                     // ...and paint the next chunk over the horizon, one per frame
   drawRunOnRail(camera.x, camera.x + VW);
   drawCurvedRails(time);                             // zone 3: the curved west rail (+ the skyline outside it)
   for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) if (getTile(tx, ty) === 'T') drawCrown(ctx, tx * TILE + 16, ty * TILE + 15, tx, ty, 19);   // the sitting-area trees: crowns drawn over their planters

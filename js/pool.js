@@ -533,6 +533,11 @@ function drawRobot(ctx, rb, time) {
 }
 function drawRobots(ctx, time) { for (const rb of robots) drawRobot(ctx, rb, time); }
 
+export function warmPool(ctx) {                            // builds the pool bottom, the caustics and the robots ahead of time (zone 2)
+  const R = poolRect(); if (!R) return;
+  if (!floorImg) initWater(ctx, R);
+  if (!robots.length) initRobots(R);
+}
 export function drawPool(ctx, time) {
   const R = poolRect(); if (!R) return;
   if (!robots.length) initRobots(R);

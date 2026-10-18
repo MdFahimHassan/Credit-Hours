@@ -82,28 +82,44 @@ function col(c, m) {                                        // m = how much of t
 const mixAt = (x, dim, fog) => 1 - dim * (1 - fog * fogK(uOf(x)));
 
 // ---- one belt (local = landing-scale coordinates; deeper floors just scale this with a canvas transform) ----
-function drawBelt(g, upper, time, dim, fog) {
-  const dirSign = upper ? -1 : 1;                           // upper belt: steps travel west (towards the landing)
-  const o = (((dirSign * time * SPEED) % 8) + 8) % 8;       // step phase in belt-space px
-  // belt body in thin vertical slices so the colour can fade towards the far end
-  for (let x = XL; x < XT; x += 2) {
-    const [t, b] = edges(upper, x + 1), q = (b - t) / TILE, m = mixAt(x + 1, dim, fog);
-    const T = Math.round(t), B = Math.round(b), h5 = 5, h2 = 2;
-    g.fillStyle = col(C.tread, m); g.fillRect(x, T, 3, B - T);
-    g.fillStyle = col(C.rail, m);  g.fillRect(x, T, 3, h5); g.fillRect(x, B - h5, 3, h5);          // handrails (outer edges)
-    g.fillStyle = col(C.yellow, m); g.fillRect(x, T + h5, 3, h2); g.fillRect(x, B - h5 - h2, 3, h2);  // yellow safety lines
+// Only the steps move. The belt body (tread, handrails, yellow lines, all fading into the dark) never changes, so it is painted ONCE per
+// (belt, brightness, fog) into a small offscreen image, and the per-pixel edges / colours of the steps are worked out once too.
+// (This used to rebuild ~100 slices with 5 colour strings each, 14 times per frame.)
+const beltCache = new Map();
+function beltData(upper, dim, fog) {
+  const key = (upper ? 'u' : 'l') + '|' + dim + '|' + fog;
+  let d = beltCache.get(key);
+  if (d) return d;
+  const h5 = 5, h2 = 2, PADY = 2;
+  const cv = document.createElement('canvas');
+  cv.width = Math.ceil(XT - XL) + 3; cv.height = TILE + 2 * PADY + 4;
+  const g = cv.getContext('2d'), oy = Math.floor(upper ? Y0 : Y1 - TILE - 2) - PADY;
+  for (let x = XL; x < XT; x += 2) {                       // belt body in thin vertical slices so the colour fades towards the far end
+    const [t, b] = edges(upper, x + 1), m = mixAt(x + 1, dim, fog);
+    const T = Math.round(t), B = Math.round(b), X = x - XL;
+    g.fillStyle = col(C.tread, m); g.fillRect(X, T - oy, 3, B - T);
+    g.fillStyle = col(C.rail, m);  g.fillRect(X, T - oy, 3, h5); g.fillRect(X, B - h5 - oy, 3, h5);          // handrails (outer edges)
+    g.fillStyle = col(C.yellow, m); g.fillRect(X, T + h5 - oy, 3, h2); g.fillRect(X, B - h5 - h2 - oy, 3, h2);  // yellow safety lines
   }
+  const n = Math.ceil(XT - XL) + 2, steps = new Array(n);  // per screen pixel x (relative to XL): where the step bars go, and their colours
+  for (let i = 0; i < n; i++) {
+    const xm = XL + i, [t, b] = edges(upper, xm), m = mixAt(xm, dim, fog), T = Math.round(t), B = Math.round(b);
+    steps[i] = { i0: T + h5 + h2, i1: B - h5 - h2, T, B, dark: col(C.dark, m), light: col(C.light, m), dash: col(C.dash, m) };
+  }
+  return (beltCache.set(key, d = { cv, oy, steps }), d);
+}
+function drawBelt(g, upper, o, dim, fog) {                  // o = step phase in belt-space px (0..8)
+  const { cv, oy, steps } = beltData(upper, dim, fog);
+  g.drawImage(cv, XL, oy);
   // steps: dark groove + light edge every 8 belt px, squeezed by the perspective; moving handrail dashes on the rails
   for (let s = o - 8; s < S_MAX; s += 8) {
     const xa = Math.round(xOf(Math.max(0, s))), xb = Math.round(xOf(Math.max(0, s + 2))), xc = Math.round(xOf(Math.max(0, s + 4)));
     if (xa >= XT) break;
-    const xm = xa + 1, [t, b] = edges(upper, xm), q = (b - t) / TILE, m = mixAt(xm, dim, fog);
-    const T = Math.round(t), B = Math.round(b), h5 = 5, h2 = 2;
-    const inner0 = T + h5 + h2, inner1 = B - h5 - h2;
-    if (xb > xa) { g.fillStyle = col(C.dark, m);  g.fillRect(xa, inner0, Math.max(1, xb - xa), inner1 - inner0); }
-    if (xc > xb) { g.fillStyle = col(C.light, m); g.fillRect(xb, inner0, Math.max(1, xc - xb), inner1 - inner0); }
-    g.fillStyle = col(C.dash, m);                                                                   // handrail dash
-    g.fillRect(xa, T + 1, Math.max(1, xc - xa), 1); g.fillRect(xa, B - 2, Math.max(1, xc - xa), 1);
+    const st = steps[Math.max(0, Math.min(steps.length - 1, xa + 1 - XL))];
+    if (xb > xa) { g.fillStyle = st.dark;  g.fillRect(xa, st.i0, Math.max(1, xb - xa), st.i1 - st.i0); }
+    if (xc > xb) { g.fillStyle = st.light; g.fillRect(xb, st.i0, Math.max(1, xc - xb), st.i1 - st.i0); }
+    g.fillStyle = st.dash;                                                                          // handrail dash
+    g.fillRect(xa, st.T + 1, Math.max(1, xc - xa), 1); g.fillRect(xa, st.B - 2, Math.max(1, xc - xa), 1);
   }
 }
 
@@ -118,14 +134,14 @@ function drawComb(g, dim) {
 }
 
 // one pair of belts + its comb plate + the landing slab it comes out of
-function drawPair(g, time, dim, fog) {
+function drawPair(g, ph, dim, fog) {                        // ph = 0..8: how far the steps have moved. The upper belt runs the other way round, so its phase is 8 - ph
   if (dim < 1) {                                            // lower floors: a strip of landing floor beside the comb plate
     const m = 1 - dim * 0.8;
     g.fillStyle = col(C.slab, m); g.fillRect(X0 - 14, Y0, 14, Y1 - Y0);
     g.fillStyle = col(C.slabLine, m); g.fillRect(X0 - 14, Y0, 14, 2); g.fillRect(X0 - 14, Y1 - 2, 14, 2); g.fillRect(X0 - 14, Y0, 2, Y1 - Y0);
   }
-  drawBelt(g, true, time, dim, fog);
-  drawBelt(g, false, time, dim, fog);
+  drawBelt(g, true, (8 - ph) % 8, dim, fog);
+  drawBelt(g, false, ph, dim, fog);
   drawComb(g, dim);
 }
 
@@ -176,6 +192,32 @@ export const wellBox = { x: X0, y: Y0, w: (right + 4) * TILE - X0, h: Y1 - Y0 };
 export const wellTiles = { x0: left, x1: right + 3, y0: eRow, y1: fRow };
 
 // Paints the whole well (no outline: the caller masks it).
+// ---- the pairs of belts as pre-painted frames ----------------------------------------------------------------------------------
+// The steps repeat every 8 belt px, so a pair of belts is one of only PH_N different pictures. Each is painted once (the first time it is needed, or
+// ahead of time by warmWell()) and the animation just picks the right one. Before, all 7 pairs were repainted from scratch, every frame.
+const PH_N = 16;
+const frames = new Map();                                   // 'top' | level index -> [PH_N canvases]
+const PADL = 16;                                            // the landing slab of a lower floor sticks out west of the well (and a flipped floor mirrors it inside)
+function pairFrame(key, dim, fog, time) {
+  const k = Math.floor((((time * SPEED) % 8) + 8) % 8 / 8 * PH_N) % PH_N;
+  let arr = frames.get(key);
+  if (!arr) frames.set(key, arr = new Array(PH_N));
+  if (!arr[k]) {
+    const c = document.createElement('canvas'); c.width = wellBox.w + PADL; c.height = wellBox.h;
+    const g = c.getContext('2d'); g.translate(PADL - wellBox.x, -wellBox.y);
+    drawPair(g, k * 8 / PH_N, dim, fog);
+    arr[k] = c;
+  }
+  return arr[k];
+}
+export function warmWell() {                                // paints every frame of every pair (called once while the screen is black)
+  for (let k = 0; k < PH_N; k++) {
+    const t = k * 8 / PH_N / SPEED;
+    pairFrame('top', 1, 1, t);
+    LEVELS.forEach((L, i) => pairFrame(i, L.dim, 0.4, t));
+  }
+}
+
 export function drawWell(g, time) {
   g.save();
   g.fillStyle = col([4, 5, 9], 0); g.fillRect(wellBox.x, wellBox.y, wellBox.w, wellBox.h);          // the deep dark
@@ -187,10 +229,10 @@ export function drawWell(g, time) {
     const tl = time * (L.sy / L.sx);
     g.save();
     g.translate(L.vx, YC); g.scale(L.flip ? -L.sx : L.sx, L.sy); g.translate(-L.vx, -YC);
-    drawPair(g, tl, L.dim, 0.4);
+    g.drawImage(pairFrame(i, L.dim, 0.4, tl), wellBox.x - PADL, wellBox.y);
     g.restore();
     drawRiders(g, tl, L, RIDERS[i], RIDER_ALPHA[i] ?? 0.5);                                        // people on that floor (hidden where the floor above covers them)
   }
-  drawPair(g, time, 1, 1);                                                                          // this floor, on top
+  g.drawImage(pairFrame('top', 1, 1, time), wellBox.x - PADL, wellBox.y);                                                                          // this floor, on top
   g.restore();
 }

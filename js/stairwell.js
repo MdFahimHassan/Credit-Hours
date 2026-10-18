@@ -108,7 +108,7 @@ export function stairwellBands(o, step = 2) {
 }
 
 // ---- what you see inside the opening ----
-export function drawStairwellInterior(ctx, o, time) {
+function paintInterior(ctx, o) {
   const { xe, y0, y1, mid, len, steps } = geo(o), inner = innerPath(o), LANE_H = y1 - y0, xs = xe - len;
   ctx.save();
   ctx.clip(inner);
@@ -153,18 +153,11 @@ export function drawStairwellInterior(ctx, o, time) {
   ctx.strokeStyle = 'rgba(8,12,18,0.30)'; ctx.lineWidth = 18; ctx.stroke(inner);
   ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = 8; ctx.stroke(inner);
 
-  // COMING SOON, waiting in the dark at the foot of the steps
-  const pulse = 0.55 + 0.25 * Math.sin(time * 2.2);
-  ctx.textAlign = 'center'; ctx.font = 'bold 10px monospace';
-  ctx.fillStyle = `rgba(190,205,215,${pulse})`;
-  const tx = xs + 36, ty = mid - 22;
-  ctx.fillText('COMING', tx, ty - 3); ctx.fillText('SOON', tx, ty + 9);
-  ctx.textAlign = 'start';
   ctx.restore();
 }
 
 // ---- the kerb + balustrade: the hole's (hole.js drawHoleRail), but along an open outline that curves in to the sides of the stairs ----
-export function drawStairwellRail(ctx, o) {
+function paintRail(ctx, o) {
   const { xe, y0, y1, mid } = geo(o), H = RAIL_H, R0 = radius(o);
   const at = (d, up = 0) => railPath(o, d, up);
   ctx.save();
@@ -204,3 +197,36 @@ export function drawStairwellRail(ctx, o) {
 
   ctx.restore();
 }
+// ---- cached pictures --------------------------------------------------------------------------------------------------------------------
+// The opening, its steps and the balustrade never change, but they cost a few hundred path strokes and fills. They are painted ONCE into
+// an offscreen image (1 image pixel = 1 world pixel, so the result is identical) and stamped every frame. Only the pulsing text is live.
+const PAD = 48;                                          // room for the rail's lift (RAIL_H) and line widths round the opening
+const baked = new Map();
+function bake(o, kind, paint) {
+  const key = kind + '|' + o.x + ',' + o.y + ',' + o.w + ',' + o.h + ',' + o.r + ',' + o.sw + ',' + o.len;
+  let b = baked.get(key);
+  if (!b) {
+    const c = document.createElement('canvas'); c.width = Math.ceil(o.w + 2 * PAD + 8); c.height = Math.ceil(o.h + 2 * PAD);
+    const g = c.getContext('2d'); g.translate(PAD - o.x, PAD - o.y);
+    paint(g, o);
+    baked.set(key, b = c);
+  }
+  return b;
+}
+export function drawStairwellInterior(ctx, o, time) {
+  ctx.drawImage(bake(o, 'in', paintInterior), o.x - PAD, o.y - PAD);
+  const { xe, y0, y1, mid, len } = geo(o), xs = xe - len;      // COMING SOON, waiting in the dark at the foot of the steps
+  const pulse = 0.55 + 0.25 * Math.sin(time * 2.2);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(o.x, o.y, o.w, o.h); ctx.clip();
+  ctx.textAlign = 'center'; ctx.font = 'bold 10px monospace';
+  ctx.fillStyle = `rgba(190,205,215,${pulse})`;
+  const tx = xs + 36, ty = mid - 22;
+  ctx.fillText('COMING', tx, ty - 3); ctx.fillText('SOON', tx, ty + 9);
+  ctx.restore();
+}
+export function drawStairwellRail(ctx, o) {
+  ctx.drawImage(bake(o, 'rail', paintRail), o.x - PAD, o.y - PAD);
+}
+// paints both pictures ahead of time (called while the screen is black, see warmup)
+export function warmStairwell(o) { bake(o, 'in', paintInterior); bake(o, 'rail', paintRail); }

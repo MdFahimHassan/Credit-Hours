@@ -144,6 +144,15 @@ function buildVariant(v) {
 }
 
 // Builds ONE missing variant per call (spreads the work over frames so there's no hitch).
+export function warmSprites() {                            // builds every recoloured student now (each one reads the sheet back from the canvas, which stalls a phone)
+  for (let i = 0; i < VARIANTS.length; i++) {
+    if (built[i]) continue;
+    const s = sheets[VARIANTS[i].sheet];
+    if (!s.complete || s.naturalWidth === 0) return false;   // sheet not loaded yet: try again
+    built[i] = buildVariant(VARIANTS[i]);
+  }
+  return true;
+}
 export function prepareVariants() {
   for (let i = 0; i < VARIANTS.length; i++) {
     if (built[i]) continue;

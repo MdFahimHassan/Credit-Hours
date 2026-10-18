@@ -223,9 +223,7 @@ export const skyline = {
     this._zone = zoneId;
     for (const s of SIDES) { this.over[s] = 0; this.close[s] = 0; this.pclose[s] = 0; }
     this.lean = 0; this.leaning = false; this.leanSide = null; this.leanTime = 0; this.touch = null;
-    const zid = zoneId, f = features();
-    SIDES.filter((s) => f[s].windows.length || f[s].groups.length).forEach((s, i) =>
-      setTimeout(() => { if (zoneId === zid) layers(s); }, 120 + i * 90));   // no hitch the first time you walk up to a rail
+    // (the pictures of every side are painted ahead of time behind the black screen, see warmup.js / skylineWarmTasks)
   },
 
   update(dt, p) {
@@ -797,6 +795,12 @@ function layers(side) {
 // ---------------------------------------------------------------------------------------------
 // Drawing (called by renderer.js BEFORE the tiles, inside the camera transform)
 // ---------------------------------------------------------------------------------------------
+// one task per side whose picture will be needed: paints it now instead of when the player first walks up to a rail
+export function skylineWarmTasks() {
+  skyline.sync();
+  const f = features();
+  return SIDES.filter((s) => f[s].windows.length || f[s].groups.length).map((s) => () => { layers(s); });
+}
 export function drawSkyline(ctx, camera, VW, VH, time) {
   skyline.sync();
   const f = features(), W = widthPx, H = heightPx;
@@ -827,6 +831,18 @@ export function drawSkyline(ctx, camera, VW, VH, time) {
 
 // The area outside a curved rail (see CURVED RAILS): the straight skyline picture, clipped to everything left of the curve. Called by renderer.js AFTER the tiles
 // (the floor tiles under it are simply painted over); the rail itself is drawn on top by renderer.js drawCurvedRails().
+const bayClips = new Map();                                          // the clip outline of a bay is ~1500 points: build it once, not every frame
+function bayClip(c, pts) {
+  const key = c.y0 + ',' + c.y1 + ',' + c.depth + ',' + c.r + ',' + c.side + ',' + c.tail + ',' + c.W;
+  let p = bayClips.get(key);
+  if (!p) {
+    p = new Path2D();
+    pts.forEach((q, i) => (i ? p.lineTo(mirrorX(c, q.x), q.y) : p.moveTo(mirrorX(c, q.x), q.y)));
+    if (c.tail > 0) p.lineTo(mirrorX(c, 0), c.y1);                   // a tail ends inside the map: close the area along the edge from there
+    p.closePath(); bayClips.set(key, p);
+  }
+  return p;
+}
 export function drawCurvedBays(g, camera, VW, VH, time, only = null) {
   for (const c of curvedRails) {
     if (only && c !== only) continue;
@@ -836,9 +852,7 @@ export function drawCurvedBays(g, camera, VW, VH, time, only = null) {
     if (side === 'e' ? camera.x + VW < widthPx - c.depth : camera.x > c.depth) continue;
     const { pts } = railPath(c);
     g.save();
-    g.beginPath(); pts.forEach((q, i) => (i ? g.lineTo(mirrorX(c, q.x), q.y) : g.moveTo(mirrorX(c, q.x), q.y)));
-    if (c.tail > 0) g.lineTo(mirrorX(c, 0), c.y1);                   // a tail ends inside the map: close the area along the edge from there
-    g.closePath(); g.clip();                                         // the face of the rail + the straight edge (x 0, or the east edge) it leaves and returns to
+    g.clip(bayClip(c, pts));                                         // the face of the rail + the straight edge (x 0, or the east edge) it leaves and returns to
     g.save();
     g.transform(...sideMatrix(side));
     g.imageSmoothingEnabled = false;

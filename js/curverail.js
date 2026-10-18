@@ -22,7 +22,14 @@ const STEP = 0.5;                  // distance (px) between two sampled points o
 // The outer face of the rail as a list of points with EXACT tangents: [{x, y, tx, ty}]. c is in pixels.
 // It starts at (0, y0) heading south and ends at (0, y1 - RAIL_W) heading WEST, where the rail of the open path takes over.
 // The inward normal (towards the floor) of a point is (ty, -tx).
+const pathCache = new Map();         // railPath is pure, and it is asked for every frame (skyline fog, curved bays): build each path only once
 export function railPath(c) {
+  const key = c.y0 + ',' + c.y1 + ',' + c.depth + ',' + c.r + ',' + c.closed + ',' + c.ret + ',' + c.tail;
+  let out = pathCache.get(key);
+  if (!out) pathCache.set(key, out = buildRailPath(c));
+  return out;                          // shared: callers must treat it as read-only
+}
+function buildRailPath(c) {
   const D = c.depth, R = Math.min(c.r, D / 2), y0 = c.y0, closed = !!c.closed, T = c.tail || 0, yE = closed ? (c.ret ?? c.y1) - R : c.y1 - RAIL_W;
   const arc = (cx, cy, a0, a1) => ({ len: Math.abs(a1 - a0) * R, at: (u) => {
     const a = a0 + (a1 - a0) * u, sg = Math.sign(a1 - a0);

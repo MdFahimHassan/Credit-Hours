@@ -7,7 +7,9 @@ import { NPC } from './npc.js';
 import { dialogue } from './dialogue.js';
 import { restroom } from './restroom.js';
 import { quest } from './quest.js';
-import { render } from './renderer.js';
+import { render, zoneWarmTasks } from './renderer.js';
+import { warmup } from './warmup.js';
+import { rideAt } from './escalator.js';
 import { intro } from './intro.js';
 import { skyline } from './skyline.js';
 import { updatePool, nearPoolThing, talkTo, signView, SIGN_AFTER, ladder, nearLadder, poolAccess } from './pool.js';
@@ -20,7 +22,18 @@ const game = {
   hint: null,          // text shown when standing on an exit/stairs tile
 };
 
+// Start-up: paint the heavy pictures of the first zone while the screen is black (see warmup.js), then the intro begins.
+transition.prepare = (p) => zoneWarmTasks([{ x: p.cx, y: p.cy }]);
+{ const r0 = rideAt(0); warmup.start(zoneWarmTasks([{ x: game.player.cx, y: game.player.cy }, { x: r0.cx, y: r0.cy }])); }
+
 function update(dt) {
+  if (warmup.active && !transition.active) { warmup.step(dt); return; }   // booting: nothing runs until the first zone is ready
+  // taps on the game screen (phones): the "[C] Credits" label opens the credits, any tap closes them, a tap on a text box advances it like E
+  for (const t of input.takeTaps()) {
+    if (game.showCredits) input.press('KeyC');
+    else if (!intro.active && t.x > 530 && t.y < 36) input.press('KeyC');
+    else if (dialogue.active || signView.active) input.press('KeyE');
+  }
   if (input.wasPressed('F3')) game.debug = !game.debug;
   if (input.wasPressed('KeyC')) game.showCredits = !game.showCredits;
   if (game.showCredits) return;                       // game is paused while credits are open
@@ -113,8 +126,9 @@ function update(dt) {
 
 // Game loop with delta time: dt = seconds since last frame.
 let last = performance.now();
+document.addEventListener('visibilitychange', () => { last = performance.now(); });   // coming back to the tab: no huge first delta
 function frame(now) {
-  const dt = Math.min((now - last) / 1000, 0.05); // clamp so a lag spike can't teleport you through walls
+  const dt = Math.max(0, Math.min((now - last) / 1000, 0.05)); // clamp so a lag spike can't teleport you through walls
   last = now;
   update(dt);
   render(game, now / 1000);

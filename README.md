@@ -33,6 +33,8 @@ You arrive on the rooftop by escalator, fading in from the floor below. A studen
 | `F3` | Toggle debug view |
 | `C` | Show or hide credits |
 
+**On a phone / tablet** the controls appear on screen automatically: a thumb stick on the left (walk), an **E** button on the right (talk / sit / lean / skip intro), and tapping `[C] Credits` opens the credits. Landscape gives the biggest view.
+
 ## Running the game
 
 The game uses ES modules, which browsers block when you open `index.html` directly from disk. Use a local server:
@@ -50,6 +52,7 @@ If you use VS Code, the *Live Server* extension also works. After editing code, 
 
 - HTML5 Canvas 2D with a `requestAnimationFrame` game loop
 - Vanilla JavaScript (ES modules)
+- Static pictures (tile chunks, fences, stairwell, escalator frames, skyline panoramas) are painted once and stamped each frame; only moving things are redrawn
 - No frameworks, engines, libraries or build tools
 
 ## Project structure
@@ -71,7 +74,9 @@ rooftop-game/
     ├── intro.js       escalator opening cutscene
     ├── skyline.js     city view beyond the rails, camera reveal, lean out
     ├── sprites.js     spritesheet loading and drawing
-    ├── input.js       keyboard input
+    ├── input.js       keyboard + touch input (thumb stick, E button)
+    ├── display.js     canvas sizing (whole-pixel scaling, phones)
+    ├── warmup.js      paints a zone's heavy pictures behind the black screen
     └── renderer.js    all drawing, camera, HUD, debug view
 ```
 
@@ -94,12 +99,12 @@ The map is a grid of characters in `js/map.js`. Every row must be the same lengt
 
 ## Roadmap
 
-- [ ] More zones: garden corner, overlook, covered area, amphitheater
+- [x] More zones: garden corner, overlook, covered area, amphitheater
 - [ ] Locked gym door and follow-up quests
-- [ ] NPC collision and more NPCs
+- [x] NPC collision and more NPCs
 - [ ] Sound effects and music
 - [ ] Save and load progress
-- [ ] Mobile touch controls
+- [x] Mobile touch controls
 - [ ] Title screen and menu
 
 ## Credits
