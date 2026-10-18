@@ -1,5 +1,5 @@
 // renderer.js - ALL drawing lives here. Game logic never touches the canvas.
-import { TILE, cols, rows, widthPx, heightPx, getTile, isSolid, items, zoneId, curvedRails, stairwells, roundedCorners, inCurvedRail, lawnBox, RAIL_UP, fences } from './map.js';
+import { TILE, cols, rows, widthPx, heightPx, getTile, isSolid, items, zoneId, curvedRails, stairwells, roundedCorners, isRoundedCornerTile, inCurvedRail, lawnBox, RAIL_UP, fences } from './map.js';
 import { railPath, cornerPath, RAIL_W } from './curverail.js';
 import { NOSE, HAT_TOP, HAT_BOT, HAT_START, HAT_TIP, TIP_R, HAT_ANGLE, HAT_HANDLE } from './nose.js';
 import { transition } from './transition.js';
@@ -277,7 +277,7 @@ function drawRunOnRail(camLeft, camRight) {
   }
 }
 function drawRail(px, py, tx, ty) {
-  if (tx === 0 && ty === 0 && roundedCorners.some((c) => c.corner === 'nw')) return;   // the rounded north-west corner: drawn by drawCurvedRails()
+  if (isRoundedCornerTile(tx, ty)) return;                             // a rounded rail corner: drawn by drawCurvedRails()
   if (inCurvedRail(tx, ty)) return;                                    // part of a curved rail: drawn as one piece by drawCurvedRails()
   const seed = tx * 7 + ty;
   const edges = railEdges(tx, ty);                                     // (map.js: the same rule gives the rail its collision)
@@ -353,13 +353,18 @@ function drawCurvedRails(time) {
     if (east) { ctx.save(); ctx.translate(widthPx, 0); ctx.scale(-1, 1); ctx.drawImage(im.cv, im.x, im.y); ctx.restore(); }   // an east bay is the west one mirrored (lit faces and slat pattern included, like the straight east rail tiles)
     else ctx.drawImage(im.cv, im.x, im.y);
   }
-  for (const rc of roundedCorners) {                                    // rounded north-west corner of the rail (a quarter circle in tile (0,0))
-    if (camera.x > rc.r + RAIL_W || camera.y > rc.r + RAIL_W) continue;
-    drawCornerNotch(ctx, time, rc.r);
-    const key = zoneId + '|corner|' + rc.corner;
+  for (const rc of roundedCorners) {                                    // rounded rail corners: the NW picture (a quarter circle in tile (0,0)), mirrored for the other corners
+    const east = rc.corner[1] === 'e', south = rc.corner[0] === 's', span = rc.r + RAIL_W;
+    if (east ? camera.x + VW < widthPx - span : camera.x > span) continue;
+    if (south ? camera.y + VH < heightPx - span : camera.y > span) continue;
+    drawCornerNotch(ctx, time, rc.r, rc.corner);
+    const key = zoneId + '|corner|nw';
     if (!curvedImgs.has(key)) curvedImgs.set(key, buildCurvedRail({ y0: 0, y1: rc.r, depth: rc.r, r: rc.r }, cornerPath(rc.r)));
     const im = curvedImgs.get(key);
+    ctx.save();
+    ctx.translate(east ? widthPx : 0, south ? heightPx : 0); ctx.scale(east ? -1 : 1, south ? -1 : 1);   // a mirrored east / south corner keeps the lit faces and the slat pattern of the straight east / south rail tiles
     ctx.drawImage(im.cv, im.x, im.y);
+    ctx.restore();
   }
 }
 
@@ -542,7 +547,17 @@ function drawBin(ch, px, py) {
 
 // ---- street dustbin (V): the blue two-part plastic bin from the photo: a tall blue body with a teal-green strip down its left side, a dark hinged lid with a lighter
 // front lip, a white label and a dark foot. One tile.
-function drawStreetBin(px, py) {
+// Some bins are turned to face along the walkway instead of the camera: BIN_TURN lists them as 'zoneId:x,y' -> quarter turns SEEN FROM ABOVE
+// (-1 = counter-clockwise: the front swings from south to EAST, +1 = clockwise: south to WEST). A turned bin still STANDS on the floor: it is drawn in side view (see
+// drawStreetBinSide), not as the front picture tipped over. Zone 3: the west bins turn CCW (to face the lawn side), the east bins CW; zone 2: both west bins CCW.
+// To turn one back, delete its entry.
+const BIN_TURN = {
+  'zone2:1,7': -1, 'zone2:1,22': -1,
+  'zone3:1,9': -1, 'zone3:1,24': -1, 'zone3:1,38': -1,
+  'zone3:72,13': 1, 'zone3:72,31': 1,
+};
+function drawStreetBin(px, py, turn = 0) {
+  if (turn) { drawStreetBinSide(px, py, turn < 0 ? 1 : -1); return; }
   const R = (x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(px + x, py + y, w, h); };
   ctx.fillStyle = 'rgba(0,0,0,0.30)'; ctx.beginPath(); ctx.ellipse(px + 17, py + 28, 12, 3.2, 0, 0, Math.PI * 2); ctx.fill();   // floor shadow
   R(8, 26, 17, 2, '#1d2024');                                                  // dark foot
@@ -555,6 +570,25 @@ function drawStreetBin(px, py) {
   R(7, 9, 20, 3, '#2b2f36'); R(7, 9, 20, 1, '#4b505a');                         // dark lid rim
   R(8, 4, 18, 6, '#3a3f48'); R(8, 4, 18, 1, '#6a707b'); R(8, 4, 3, 6, '#4b515c'); R(23, 4, 3, 6, '#2b2f36');   // lid
   R(13, 6, 8, 2, '#23262c');                                                    // handle recess
+}
+// The same bin seen from the SIDE, standing on the floor (same height, same foot and shadow as the front view, but narrower, as a bin is shallower than wide).
+// dir = -1: the front faces WEST (left of the picture), dir = 1: the front faces EAST. Drawn facing west, then mirrored about the tile's centre line for east.
+function drawStreetBinSide(px, py, dir) {
+  ctx.save();
+  if (dir > 0) { ctx.translate(px + 32, py); ctx.scale(-1, 1); ctx.translate(-px, -py); }   // mirror left-right about the tile centre
+  const R = (x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(px + x, py + y, w, h); };
+  ctx.fillStyle = 'rgba(0,0,0,0.30)'; ctx.beginPath(); ctx.ellipse(px + 16, py + 28, 10, 3, 0, 0, Math.PI * 2); ctx.fill();   // floor shadow
+  R(9, 26, 15, 2, '#1d2024');                                                  // dark foot
+  for (let y = 11; y <= 25; y++) {                                              // body: the teal front edge on the left, shaded back on the right, a hint of taper
+    const t = y > 18 ? 1 : 0, x0 = 9 + t, x1 = 24 - t;
+    R(x0, y, x1 - x0, 1, '#2a67ae'); R(x0, y, 3, 1, '#2e9a8c'); R(x0 + 3, y, 1, 1, '#1d6e88'); R(x1 - 3, y, 3, 1, '#1f4f89');
+  }
+  R(10, 12, 1, 12, '#5fc6b4');                                                  // light catching the teal front edge
+  R(15, 15, 3, 1, '#cfe4f2'); R(15, 17, 3, 1, '#a9cde6'); R(15, 19, 2, 1, '#cfe4f2');   // a few label marks on the side panel
+  R(8, 9, 17, 3, '#2b2f36'); R(8, 9, 17, 1, '#4b505a');                         // dark lid rim
+  R(9, 4, 16, 6, '#3a3f48'); R(9, 4, 16, 1, '#6a707b'); R(6, 5, 4, 5, '#4b515c'); R(6, 5, 4, 1, '#6a707b'); R(21, 4, 4, 6, '#2b2f36');   // lid, its lighter front lip sticking out to the front, darker hinge side at the back
+  R(22, 5, 2, 3, '#23262c');                                                    // hinge recess
+  ctx.restore();
 }
 
 // ---- amphitheatre tiers (A) + railed stair flights (S, zone 1) ---------------------------------------------------------
@@ -1041,7 +1075,7 @@ function drawTile(ch, px, py, tx, ty, time) {
   } else if (ch === 'a' || ch === 'o') {              // recycling bins (blue / red)
     drawBin(ch, px, py);
   } else if (ch === 'V') {                            // street dustbin (blue plastic, dark lid)
-    drawStreetBin(px, py);
+    drawStreetBin(px, py, BIN_TURN[zoneId + ':' + tx + ',' + ty] ?? 0);
   } else if (ch === 'C') {                            // concrete bench
     drawBench(px, py, tx, ty);
   } else if (ch === 'T') {                            // tree in a grey planter box

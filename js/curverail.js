@@ -54,7 +54,8 @@ export function railPath(c) {
   return { pts, len: total };
 }
 
-// The rounded NORTH-WEST corner of the zone's rail (zones.js `roundedCorners: [{ corner: 'nw', r: 1 }]`): a quarter circle, centre (R, R), from (R, 0) heading WEST to (0, R) heading
+// The rounded corners of the zone's rail (zones.js `roundedCorners: [{ corner: 'nw', r: 1 }, ...]`, corner = 'nw' | 'ne' | 'sw' | 'se'). Everything here is built for the NORTH-WEST corner; the others are
+// that picture mirrored (x for the east corners, y for the south ones), exactly like an east bay is the west one mirrored. The NORTH-WEST corner of the zone's rail: a quarter circle, centre (R, R), from (R, 0) heading WEST to (0, R) heading
 // SOUTH (the same bend as the closing bend of a `closed` bay). The north edge rail carries on east from x = R and the west edge rail south from y = R, both as ordinary tiles.
 // Same format as railPath: the inward normal of a point is (ty, -tx). In pixels.
 export function cornerPath(R) {

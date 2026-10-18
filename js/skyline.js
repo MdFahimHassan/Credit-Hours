@@ -39,7 +39,7 @@ const STAIR_LEN = 192;        // same for a flight of stairs
 const EXIT_VIEW = { zone3: { s: 80 } };   // per zone + side: reveal only this many px beyond an exit instead of OVER_PATH (and fade to black within it). Zone 3's south edge shows just a short glimpse of what is below
 const REVEAL_SPEED = 5;       // how quickly the camera slides (higher = snappier)
 
-import { TILE, FOOT, groundDY, getTile, getExit, zoneId, cols, rows, widthPx, heightPx, curvedRails } from './map.js';
+import { TILE, FOOT, groundDY, getTile, getExit, zoneId, cols, rows, widthPx, heightPx, curvedRails, roundedCorners } from './map.js';
 import { railPath, faceX, mirrorX, RAIL_W } from './curverail.js';
 import { vineStrands, railVineStrands, drawCurveVines, drawVines, drawVineLip } from './foliage.js';
 import { paintDoorFront } from './glassdoor.js';
@@ -65,6 +65,8 @@ const WINDOW_FILL = { zone1: { e: [[8, 21]] }, zone2: { w: [[8, 21]] } };   // z
 //   left of it: the picture has `depth` px of near ground on the wrong side of its edge line (paintPano dneg), and drawCurvedBays() paints it into the area outside the curve.
 const BAY_NEAR = 96;   // px of near ground (the street at d 46-58 + the roofs round it) that is repeated to fill a deep bay (see paintPano)
 const bayDepthPx = (side) => Math.max(0, ...curvedRails.filter((c) => c.side === side).map((c) => c.depth));   // (c.side: 'w' or 'e', see curverail.js)
+// a rounded rail corner needs the picture of its side to reach r px past the edge, into the map (the notch outside the quarter circle, see drawCornerNotch)
+const cornerDepthPx = (side) => Math.max(0, ...roundedCorners.filter((c) => c.corner[1] === side).map((c) => c.r));   // (c.corner[1] = 'w' or 'e')
 const WALL_STYLE = { zone1: { n: 'terrace' } };
 const wallStyle = (zid, side) => WALL_STYLE[zid]?.[side] ?? 'concrete';
 // EXTEND: the skyline of this side carries on past the START of the edge (u < 0) instead of ending in a cream-wall corner.
@@ -143,7 +145,7 @@ function features() {
     if (g) groups.push(g);
     const ex = EXTEND[zoneId]?.[s] ? EXT : 0;
     feat[s] = { len: n * TILE, rails, exits, exitsView, windows, groups, ext: ex, extEnd: ex,
-                dneg: Math.max(Object.values(SHARE[zoneId] ?? {}).includes(s) ? DNEG : 0, bayDepthPx(s)), share: SHARE[zoneId]?.[s] ?? null };
+                dneg: Math.max(Object.values(SHARE[zoneId] ?? {}).includes(s) ? DNEG : 0, bayDepthPx(s), cornerDepthPx(s)), share: SHARE[zoneId]?.[s] ?? null };
   }
   return feat;
 }
@@ -848,15 +850,20 @@ export function drawCurvedBays(g, camera, VW, VH, time, only = null) {
   }
 }
 
-// The notch outside a rounded north-west rail corner (inside the map's first tile): the west picture carried on, like the bays (it has `depth` px of near ground on the wrong side)
-export function drawCornerNotch(g, time, R) {
-  const L = layers('w');
+// The notch outside a rounded rail corner (inside the map's corner tile): the picture of the side the corner is on (west picture for 'nw' / 'sw', east for 'ne' / 'se') carried on,
+// like the bays (it has `depth` px of near ground on the wrong side). The clip is the NW shape (the square corner minus the quarter circle of the rail), mirrored for the other corners.
+export function drawCornerNotch(g, time, R, corner = 'nw') {
+  const side = corner[1], east = side === 'e', south = corner[0] === 's';
+  const L = layers(side);
   if (!L.pano) return;
+  const mirror = [east ? -1 : 1, 0, 0, south ? -1 : 1, east ? widthPx : 0, south ? heightPx : 0];   // a mirror is its own inverse: applying it twice leaves the clip where it is and the picture unmirrored
   g.save();
+  g.transform(...mirror);
   g.beginPath(); g.moveTo(0, 0); g.lineTo(R, 0); g.arc(R, R, R, -Math.PI / 2, -Math.PI, true); g.closePath(); g.clip();   // the square corner minus the quarter circle of the rail
-  g.transform(...sideMatrix('w'));
+  g.transform(...mirror);
+  g.transform(...sideMatrix(side));
   g.imageSmoothingEnabled = false;
-  drawPicture(g, 'w', L.pano, time);
+  drawPicture(g, side, L.pano, time);
   g.restore();
 }
 

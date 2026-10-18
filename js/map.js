@@ -134,8 +134,11 @@ export function railEdges(tx, ty) {                                  // which ed
 }
 const isRailTile = (x, y) => getTile(x, y) === 'R';
 // is this 'R' tile drawn by something else (and so given its collision by something else)?
+// the tile at the zone's corner `corner` ('nw' | 'ne' | 'sw' | 'se') - where a rounded rail corner replaces the two straight pieces
+const cornerTile = (corner) => [corner[1] === 'w' ? 0 : cols - 1, corner[0] === 'n' ? 0 : rows - 1];
+export const isRoundedCornerTile = (tx, ty) => roundedCorners.some((c) => { const [cx, cy] = cornerTile(c.corner); return tx === cx && ty === cy; });
 const railHandledElsewhere = (tx, ty) => inCurvedRail(tx, ty)
-  || (tx === 0 && ty === 0 && roundedCorners.some((c) => c.corner === 'nw'))
+  || isRoundedCornerTile(tx, ty)
   || (zoneId === 'zone1' && tx >= NOSE.tx + 1 && tx < NOSE.tx + NOSE.w && ty >= NOSE.ty && ty < NOSE.ty + NOSE.h);
 // Does the player's ground strip collide with the WHOLE tile? (R tiles never do - their rails are thin walls; so are the nose tiles of the escalator)
 const tileBlocks = (tx, ty) => {
@@ -182,7 +185,10 @@ function buildThinWalls() {
   for (const h of holes) thinWalls.push(...holeBands(h));          // every hole is solid, following its curve exactly (hole.js)
   for (const s of stairwells) thinWalls.push(...stairwellBands(s));   // the kerb ring + the barrier in the dark (stairwell.js); the steps are walkable
   for (const c of curvedRails) thinWalls.push(...railBands(c));    // so is everything outside a curved rail (curverail.js)
-  for (const c of roundedCorners) if (c.corner === 'nw') thinWalls.push(...cornerBands(c.r));   // the rounded north-west corner: the quarter circle, not the whole corner tile
+  for (const c of roundedCorners) for (const b of cornerBands(c.r)) {                              // every rounded rail corner: the quarter circle, not the whole corner tile. The bands are made for the NW corner, then mirrored
+    const east = c.corner[1] === 'e', south = c.corner[0] === 's';
+    thinWalls.push({ x: east ? widthPx - b.w : b.x, y: south ? heightPx - b.y - b.h : b.y, w: b.w, h: b.h });
+  }
   if (zoneId === 'zone1') thinWalls.push(...noseBands());                                          // the rounded nose of the escalator rail (nose.js)
   thinWalls.push(...mergeRects(railRects()));                                                      // every other railing 'R' tile: exactly the picture of the rail, not the whole tile
   const L = lawnBox();                                              // the white rail round the lawn: where it stops (the entrance), the end post stands up in front of the open floor - solid too

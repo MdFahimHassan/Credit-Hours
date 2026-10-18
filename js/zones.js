@@ -74,6 +74,7 @@ export const ZONES = {
   //   - rows 8-21, x 29-36: the planted bed (same H / Y / Z mix), wall on x 37
   zone1: {
     name: 'Rooftop Entry',
+    roundedCorners: [{ corner: 'ne', r: 1 }, { corner: 'se', r: 1 }],   // smooth rail corners (curverail.js): the north-east and south-east corners of the rail (the two west ones are the exit paths)
     rows: [
     "eUqHYH876SS66SS678YHYqUUkkkHHHHUURRRRR",
     "#.qYHH765SS55SS567HZHq..kkkYHHH......R",
@@ -140,6 +141,7 @@ export const ZONES = {
   //   x 30 (X, rows 1-2) with the normal black fade -> zone 3 (Lawn Zone). Zone 4 (the top-left zone) was removed: the real rooftop is L-shaped.
   zone2: {
     name: 'Pool Zone',
+    roundedCorners: [{ corner: 'nw', r: 1 }, { corner: 'sw', r: 1 }],   // smooth rail corners (curverail.js): the two west corners (the east ones are open paths: the rail runs on beside them)
     spawn: { x: 29, y: 10 },
     rows: [
     "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
@@ -218,8 +220,8 @@ export const ZONES = {
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
       "R...............qggggggggggggggggggggggggggggggggggggggggq...............R",
-      "R...............qggggggggggggggggggggggggggggggggggggggggq...........CCC.R",
-      "RV.....HHYHkkk..qggggggggggggggggggggggggggggggggggggggggyyykkkHHYHH.CTC.R",
+      "RV..............qggggggggggggggggggggggggggggggggggggggggq...........CCC.R",
+      "R......HHYHkkk..qggggggggggggggggggggggggggggggggggggggggyyykkkHHYHH.CTC.R",
       "R.CCC..HYHHkkk..qggggggggggggggggggggggggggggggggggggggggyyykkkHYHHY.CTC.R",
       "R.CTC..YHHYkkknnqggggggggggggggggggggggggggggggggggggggggyyykkkYHHYH.CCC.R",
       "R.CTC..HHYHkkknnqggggggggggggggggggggggggggggggggggggggggquukkkHHYHH.CTC.R",
@@ -270,7 +272,7 @@ export const ZONES = {
     // curved rails (curverail.js): the west rail steps in 8 tiles beside the hole (straight at x8, rows 19-24, 2 tiles of floor between it and the hole) like the hole's own balustrade: straight runs with rounded
     // corners (r: 1 tile) only at the turns - across on rows 17 and 25, where the old walls were. The lower return runs straight into the rail of the path to zone 2.
     // The skyline stays one straight picture to the left of it. The x0 tiles of rows 17-25 are 'R' (solid) but are not drawn: the curve is.
-    roundedCorners: [{ corner: 'nw', r: 1 }],   // the north-west corner of the rail is a quarter circle (curverail.js cornerPath)
+    roundedCorners: [{ corner: 'nw', r: 1 }, { corner: 'ne', r: 1 }],   // the north-west and north-east corners of the rail are quarter circles (curverail.js cornerPath; the east one is the west one mirrored)
     curvedRails: [{ y0: 39, y1: 48, depth: 8, r: 1 }, { y0: 10, y1: 24, depth: 4, r: 1, closed: true },   // the 2nd (north) bay is CLOSED, only 4 tiles deep and 14 rows tall (rows 10-23, ONE free row 9 below the bench ring): it has no path at its end, so its rail curves back into the west edge
       // the EAST bay (side: 'e' = the mirror image of a west one), round the east hole (x59-62, rows 33-40). The zone's east edge is now x74 (5 columns were added above row 32: the upper right is 5 tiles wider),
       // so from row 32 down the rail leaves the NEW edge, turns left (west) across row 33, runs north-south with exactly ONE tile of floor between the hole's kerb (x63) and the rail's inner face (x64),

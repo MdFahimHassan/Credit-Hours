@@ -315,7 +315,7 @@ export function drawGlassFront(ctx, px, py, tx, ty) {
 }
 
 // The lower floor + the people on it + the depth dimmer, seen through whatever clip is active (bb = the box round the opening).
-function drawBelow(ctx, time, camera, VW, VH, bb) {
+function drawBelow(ctx, time, camera, VW, VH, bb, laneLines = true) {
   // parallax: the floor below is far away, so it slides less than the roof when the camera moves
   const px = (camera.x + VW / 2 - bb.cx) * PARALLAX, py = (camera.y + VH / 2 - bb.cy) * PARALLAX;
   const ox = bb.cx + px, oy = bb.cy + py;                             // origin of the "below" world
@@ -326,8 +326,10 @@ function drawBelow(ctx, time, camera, VW, VH, bb) {
   ctx.translate(Math.round(ox), Math.round(oy));
   ctx.fillStyle = floorPattern; ctx.fillRect(-ex, -ey, ex * 2, ey * 2);
   // painted lane lines (dashed), a tactile strip and a few hatches, like on the real floor
-  ctx.fillStyle = 'rgba(235,235,235,0.55)';
-  for (const ly of [-150, 58, 170]) for (let x = -ex; x < ex; x += 22) ctx.fillRect(x, ly, 12, 2);
+  if (laneLines) {                                                     // (the holes pass false: no dotted white line down there)
+    ctx.fillStyle = 'rgba(235,235,235,0.55)';
+    for (const ly of [-150, 58, 170]) for (let x = -ex; x < ex; x += 22) ctx.fillRect(x, ly, 12, 2);
+  }
   ctx.fillStyle = 'rgba(205,200,170,0.5)'; ctx.fillRect(-62, -ey, 5, ey * 2);
   ctx.fillStyle = 'rgba(0,0,0,0.18)';
   for (let y = -ey; y < ey; y += 4) ctx.fillRect(-61, y, 3, 1);
@@ -378,7 +380,7 @@ function drawHoles(ctx, time, camera, VW, VH) {
     if (h.x > camera.x + VW || h.x + h.w < camera.x || h.y - 20 > camera.y + VH || h.y + h.h < camera.y) return;   // off-screen: still simulated, not drawn
     ctx.save();
     ctx.clip(holeInner(h));
-    drawBelow(ctx, time, camera, VW, VH, bb);
+    drawBelow(ctx, time, camera, VW, VH, bb, false);
     drawHoleInterior(ctx, h);
     ctx.restore();
     drawHoleRail(ctx, h);
