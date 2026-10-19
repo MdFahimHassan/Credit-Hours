@@ -1,7 +1,8 @@
-// main.js - creates everything and runs the game loop.
-import { spawn, npcSpawn, items, getExitHint, getExit, findSeat, nearWaterFilter, nearRestroom, zoneId, TILE } from './map.js';
+// main.js - creates everything and runs the game loop. Which screen is showing (menu / playing / paused) is decided in scene.js; this file sends
+// update and drawing to the right place and starts / resets a run (startEpisode).
+import { spawn, npcSpawn, items, getExitHint, getExit, findSeat, nearWaterFilter, nearRestroom, zoneId, TILE, loadZone, resetItems, swim } from './map.js';
 import { transition } from './transition.js';
-import { input } from './input.js';
+import { input, setTouchMode } from './input.js';
 import { Player } from './player.js';
 import { NPC } from './npc.js';
 import { dialogue } from './dialogue.js';
@@ -13,30 +14,65 @@ import { rideAt } from './escalator.js';
 import { intro } from './intro.js';
 import { skyline } from './skyline.js';
 import { updatePool, nearPoolThing, talkTo, signView, SIGN_AFTER, ladder, nearLadder, poolAccess } from './pool.js';
+import { scene } from './scene.js';
+import { menu } from './menu.js';
+import { settings, onSettingChange } from './settings.js';
 
 const game = {
   player: new Player(spawn.x, spawn.y),
   npc: new NPC(npcSpawn.x, npcSpawn.y),
   debug: false,
-  showCredits: false,   // press C to toggle the credits screen
   hint: null,          // text shown when standing on an exit/stairs tile
 };
 
-// Start-up: paint the heavy pictures of the first zone while the screen is black (see warmup.js), then the intro begins.
+// Zone change: paint the heavy pictures of the new zone while the screen is black (see warmup.js)
 transition.prepare = (p) => zoneWarmTasks([{ x: p.cx, y: p.cy }]);
-{ const r0 = rideAt(0); warmup.start(zoneWarmTasks([{ x: game.player.cx, y: game.player.cy }, { x: r0.cx, y: r0.cy }])); }
+
+// Begin a fresh run of an episode: every piece of run state goes back to its starting value, then the first zone is painted behind a black screen
+// (warmup.js) and the intro cutscene plays. Quitting to the menu and pressing Play again goes through exactly the same path as the very first start.
+function startEpisode(ep) {
+  quest.state = 'start';
+  dialogue.active = false; dialogue.onFinish = null;
+  restroom.active = false; restroom.uses = { men: 0, women: 0 };
+  signView.active = false; ladder.active = false; swim.on = false;
+  transition.active = false;
+  intro.reset();
+  skyline.forget();
+  resetItems();                                              // the ID card lies on the floor again
+  loadZone(ep.startZone);
+  game.player = new Player(spawn.x, spawn.y);
+  game.npc = new NPC(npcSpawn.x, npcSpawn.y);
+  game.hint = null;
+  const r0 = rideAt(0);
+  warmup.start(zoneWarmTasks([{ x: game.player.cx, y: game.player.cy }, { x: r0.cx, y: r0.cy }]));
+  scene.set('playing');
+}
+
+let pausedAt = 0;                                            // the game's clock is frozen at this moment while paused (the picture stays still)
+function pause() { input.releaseAll(); pausedAt = performance.now() / 1000; scene.set('paused'); menu.openPause(); }
+function resume() { scene.set('playing'); last = performance.now(); }
+function quitToMenu() { scene.set('menu'); menu.enter(); }
+
+// Touch controls follow Settings > Touch controls
+setTouchMode(settings.touch);
+onSettingChange((k, v) => { if (k === 'touch') setTouchMode(v); });
+
+menu.init({ onPlay: startEpisode, onResume: resume, onQuit: quitToMenu });
+scene.set('menu');
+menu.enter();
 
 function update(dt) {
+  if (scene.is('menu')) { input.takeTaps(); menu.update(dt); return; }
+  if (scene.is('paused')) { input.takeTaps(); menu.updatePause(dt); return; }
+
   if (warmup.active && !transition.active) { warmup.step(dt); return; }   // booting: nothing runs until the first zone is ready
-  // taps on the game screen (phones): the "[C] Credits" label opens the credits, any tap closes them, a tap on a text box advances it like E
+  // taps on the game screen (phones, or a mouse click): the "[Esc] Menu" label opens the pause menu, a tap on a text box advances it like E
   for (const t of input.takeTaps()) {
-    if (game.showCredits) input.press('KeyC');
-    else if (!intro.active && t.x > 530 && t.y < 36) input.press('KeyC');
+    if (!intro.active && t.x > 530 && t.y < 36) { pause(); return; }
     else if (dialogue.active || signView.active) input.press('KeyE');
   }
+  if (input.wasPressed('Escape') && !signView.active) { pause(); return; }   // (the sign card uses Esc to close itself)
   if (input.wasPressed('F3')) game.debug = !game.debug;
-  if (input.wasPressed('KeyC')) game.showCredits = !game.showCredits;
-  if (game.showCredits) return;                       // game is paused while credits are open
 
   // Opening cutscene: player is script-controlled. E or Space skips it.
   if (intro.active) {
@@ -131,7 +167,9 @@ function frame(now) {
   const dt = Math.max(0, Math.min((now - last) / 1000, 0.05)); // clamp so a lag spike can't teleport you through walls
   last = now;
   update(dt);
-  render(game, now / 1000);
+  if (scene.is('menu')) menu.draw();
+  else if (scene.is('paused')) { render(game, pausedAt); menu.drawPause(); }
+  else render(game, now / 1000);
   input.endFrame();                                // clear "pressed this frame" keys
   requestAnimationFrame(frame);
 }

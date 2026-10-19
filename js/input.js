@@ -6,7 +6,7 @@ const held = new Set();     // keys currently down (for movement)
 const pressed = new Set();  // keys that went down this frame (for E, F3)
 const taps = [];            // screen taps in game coordinates [{x, y}], read once per frame by main.js
 
-const GAME_KEYS = new Set(['Space', 'KeyE', 'KeyC', 'F3']);
+const GAME_KEYS = new Set(['Space', 'KeyE', 'KeyC', 'F3', 'Enter', 'Escape', 'Backspace']);
 
 window.addEventListener('keydown', (e) => {
   if (!e.repeat) pressed.add(e.code);   // ignore auto-repeat when holding a key
@@ -45,10 +45,9 @@ const stick = {
     this.knob.style.transform = ''; this.el.classList.remove('down');
   },
 };
-function setupTouch() {
-  document.body.classList.add('touch');
-  if (setupTouch.done) return;
-  setupTouch.done = true;
+function wireTouch() {
+  if (wireTouch.done) return;
+  wireTouch.done = true;
   const { el } = stick;
   el.addEventListener('pointerdown', (e) => {
     if (stick.id !== null) return;
@@ -62,17 +61,26 @@ function setupTouch() {
   const btn = document.getElementById('btnE');
   btn.addEventListener('pointerdown', (e) => { pressed.add('KeyE'); held.add('KeyE'); btn.classList.add('down'); btn.setPointerCapture(e.pointerId); e.preventDefault(); });
   for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) btn.addEventListener(t, () => { held.delete('KeyE'); btn.classList.remove('down'); });
-
-  // a tap on the game itself (credits label, closing the credits, advancing a dialogue): see main.js
-  document.getElementById('game').addEventListener('pointerdown', (e) => {
-    const p = toGame(e.clientX, e.clientY);
-    if (p) taps.push(p);
-  });
   window.addEventListener('contextmenu', (e) => e.preventDefault());           // no long-press menu on the controls
 }
-// Show the controls on phones / tablets straight away, and on any other device the first time a finger touches the screen.
-if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) setupTouch();
-else window.addEventListener('touchstart', setupTouch, { once: true, passive: true });
+// A tap / click on the game itself (the MENU label, advancing a dialogue): see main.js. Wired always, so a mouse click works too.
+document.getElementById('game').addEventListener('pointerdown', (e) => {
+  const p = toGame(e.clientX, e.clientY);
+  if (p) taps.push(p);
+});
+
+// On-screen controls. 'auto' = on phones / tablets straight away, and on any other device the first time a finger touches the screen; 'on' = always; 'off' = never
+// (Settings > Touch controls, see settings.js). main.js also hides them outside the game itself (the `in-game` class on <body>).
+let touchMode = 'auto', touchSeen = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+function applyTouch() {
+  const on = touchMode === 'on' || (touchMode === 'auto' && touchSeen);
+  if (on) wireTouch();
+  document.body.classList.toggle('touch', on);
+  if (!on) stick.release();
+}
+export function setTouchMode(mode) { touchMode = mode; applyTouch(); }
+window.addEventListener('touchstart', () => { if (!touchSeen) { touchSeen = true; applyTouch(); } }, { once: true, passive: true });
+applyTouch();
 
 export const input = {
   left:  () => held.has('KeyA') || held.has('ArrowLeft'),
@@ -82,5 +90,6 @@ export const input = {
   wasPressed: (code) => pressed.has(code),
   press: (code) => pressed.add(code),   // act as if the key had just been pressed (used for taps)
   takeTaps: () => (taps.length ? taps.splice(0) : taps),   // the taps since the last call
+  releaseAll,                           // let go of every key and the touch stick (the pause menu opens while a finger may still be down)
   endFrame: () => pressed.clear(),      // call once at the end of every frame
 };

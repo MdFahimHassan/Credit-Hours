@@ -9,7 +9,13 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="preload" href="assets/fonts/rubik-glitch-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/pixelify-sans-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
   <style>
+    /* menu fonts (both SIL OFL, licences in assets/fonts). font-display: block keeps the menu text invisible for a moment instead of flashing a fallback face. */
+    @font-face { font-family:'Rubik Glitch'; src:url(assets/fonts/rubik-glitch-latin-400-normal.woff2) format('woff2'); font-weight:400; font-display:block; }
+    @font-face { font-family:'Pixelify Sans'; src:url(assets/fonts/pixelify-sans-latin-400-normal.woff2) format('woff2'); font-weight:400; font-display:block; }
+    @font-face { font-family:'Pixelify Sans'; src:url(assets/fonts/pixelify-sans-latin-700-normal.woff2) format('woff2'); font-weight:500 700; font-display:block; }
     html, body { margin:0; height:100%; background:#1a1a22; overflow:hidden; overscroll-behavior:none; }
     /* position:fixed + inset:0 = exactly the visible area (100vh is taller than the screen on phones: it ignores the browser's address bar) */
     body { position:fixed; inset:0; display:flex; justify-content:center; align-items:center;
@@ -19,9 +25,9 @@
     /* phone held upright: the game sits at the top and the thumb controls get the empty space below it */
     @media (orientation: portrait) and (pointer: coarse) { body { align-items:flex-start; padding-top:env(safe-area-inset-top); } }
 
-    /* ---- touch controls (shown on touch screens only, see input.js) ---- */
+    /* ---- touch controls (shown on touch screens only, and only while playing: see input.js and scene.js) ---- */
     #touch { display:none; position:fixed; inset:0; pointer-events:none; z-index:5; }
-    body.touch #touch { display:block; }
+    body.touch.in-game #touch { display:block; }
     #touch .pad { position:absolute; pointer-events:auto; touch-action:none; border-radius:50%;
                   background:rgba(255,255,255,0.10); border:2px solid rgba(255,255,255,0.30); box-sizing:border-box; }
     #stick { width:128px; height:128px; left:calc(18px + env(safe-area-inset-left)); bottom:calc(18px + env(safe-area-inset-bottom)); }
@@ -32,7 +38,7 @@
     #btnE.down, #stick.down { background:rgba(255,255,255,0.25); }
     #rotate { display:none; position:fixed; left:0; right:0; top:calc(env(safe-area-inset-top) + 75vw + 8px); text-align:center;
               font:12px monospace; color:rgba(255,255,255,0.45); pointer-events:none; }
-    @media (orientation: portrait) { body.touch #rotate { display:block; } }
+    @media (orientation: portrait) { body.touch.in-game #rotate { display:block; } }
   </style>
 </head>
 <body>

@@ -216,6 +216,7 @@ export const skyline = {
   leaning: false, leanSide: null, leanTime: 0,
   touch: null,                          // side whose rail the player is touching right now (or null)
   _zone: null,
+  forget() { this._zone = null; },   // a new run: the next sync() resets everything (main.js resetRun)
 
   // forget everything when the zone changes, and paint the new zone's pictures one by one in the background
   sync() {

@@ -26,12 +26,21 @@ exported straight from the generator:
 - Player: [`assets/character-credits.txt`](assets/character-credits.txt)
 - NPC: [`assets/npc-credits.txt`](assets/npc-credits.txt)
 
-Please keep both files with the project, and keep the in-game Credits screen (press **C**).
+Please keep both files with the project, and keep the in-game Credits screen (main menu > Credits).
 
 ### Licenses
 The layers are offered under OGA-BY 3.0, CC-BY-SA 3.0 and/or GPL 3.0 (see the files above for each layer).
 We distribute the character art under **CC-BY-SA 3.0**, with attribution to all the artists listed.
 Share-alike means edited versions of the art (including the recoloured student variants made in `js/sprites.js`)
 should be shared under the same license. The game code is under the MIT License (see `LICENSE`).
+
+## Fonts
+The menu uses two fonts from Google Fonts, both under the **SIL Open Font License 1.1** (the full licence texts are in `assets/fonts/`):
+
+- **Rubik Glitch** (title) - copyright 2020 The Rubik Filtered Project Authors
+- **Pixelify Sans** (menu text) - copyright 2021 The Pixelify Sans Project Authors
+
+## Menu and episode artwork
+The menu backgrounds and the Episode 1 card picture (`assets/menu/`) were made by the authors with AI image tools. The present-day background is based on a public photograph of the building.
 
 *This is a summary, not legal advice. If the game is ever sold or published commercially, re-check each layer's license.*

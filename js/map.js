@@ -29,6 +29,9 @@ const propMap = new Map();                   // 'ty*1000+tx' -> prop, so propAt(
 export let thinWalls = [];                   // solid pixel rectangles thinner than a tile (the stair handrails) - see buildThinWalls()
 const itemCache = {};                        // keeps the ID card "collected" when you leave and come back
 
+// A new run starts with the ID card lying on the floor again (see main.js resetRun).
+export function resetItems() { for (const k of Object.keys(itemCache)) delete itemCache[k]; }
+
 export function loadZone(id) {
   const zone = ZONES[id];
   const text = zone.rows;

@@ -1668,11 +1668,10 @@ export function render(game, time) {
   // ---- HUD (screen space, not affected by camera) ----
   if (!intro.active) {
     drawQuestTracker(game.hasCard);
-    ctx.font = '12px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText('[C] Credits', VW - 100, 24);
+    ctx.font = '12px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText('[Esc] Menu', VW - 100, 24);
   }
   if (dialogue.active) drawDialogue();
   else if (game.hint && !intro.active) drawHint(game.hint);
-  if (game.showCredits) drawCredits();
   const fade = Math.max(intro.fade, transition.alpha);   // intro fade-in OR zone-change fade
   if (fade > 0) {                                    // drawn last = covers everything
     ctx.fillStyle = `rgba(0,0,0,${fade})`; ctx.fillRect(0, 0, VW, VH);
@@ -1759,27 +1758,4 @@ function drawPlayer(player) {
   // Walking in a bush: draw the bush leaves again over the player's feet so he looks "inside" it
   const ftx = Math.floor(player.cx / TILE), fty = Math.floor((player.y + player.h - 1) / TILE);
   if (!intro.active && getTile(ftx, fty) === 'b') drawBlobs(ftx * TILE, fty * TILE, 0.9);
-}
-
-// ---- Credits screen (press C). LPC art REQUIRES visible credits, so keep this! ----
-function wrap(text, x, y, maxW, lineH) {
-  let line = '';
-  for (const word of text.split(' ')) {
-    if (ctx.measureText(line + word).width > maxW) { ctx.fillText(line, x, y); line = ''; y += lineH; }
-    line += word + ' ';
-  }
-  ctx.fillText(line, x, y);
-  return y + lineH;
-}
-function drawCredits() {
-  ctx.fillStyle = '#0a0a14'; ctx.fillRect(0, 0, VW, VH);
-  ctx.font = 'bold 20px monospace'; ctx.fillStyle = '#ffd54f'; ctx.fillText('CREDITS', 30, 44);
-  ctx.font = '14px monospace'; ctx.fillStyle = '#fff';
-  let y = 78;
-  y = wrap('Credit Hours - made by Md. Fahim Hassan & Shahriar Islam Tawsif, CSE students. A passion project.', 30, y, VW - 60, 20) + 8;
-  y = wrap('Player and NPC sprites: made with the Universal LPC Spritesheet Character Generator.', 30, y, VW - 60, 20) + 8;
-  y = wrap('Sprites contributed as part of the Liberated Pixel Cup project from OpenGameArt.org: http://opengameart.org/content/lpc-collection', 30, y, VW - 60, 20) + 8;
-  y = wrap('License: Creative Commons Attribution-ShareAlike 3.0 (CC-BY-SA 3.0) http://creativecommons.org/licenses/by-sa/3.0/', 30, y, VW - 60, 20) + 8;
-  y = wrap('Detailed per-artist credits: see CREDITS.md, assets/character-credits.txt (player) and assets/npc-credits.txt (NPC)', 30, y, VW - 60, 20);
-  ctx.fillStyle = '#aaa'; ctx.fillText('[C] close', 30, VH - 24);
 }

@@ -54,7 +54,8 @@ Zones are linked by paths and stairs. Walking onto an exit fades the screen to b
 
 **Quality of life**
 - **Mobile touch controls** with a thumb stick and an **E** button, plus tap-to-advance dialogue
-- **In-game credits screen** (press `C`)
+- **Main menu** with the title, an episode card for each episode (locked ones show "Coming soon"), Settings, Help and Credits. The background rotates through alternate "timelines" of the building. Esc opens a pause menu with Resume, Settings and Quit to Menu
+- **Settings** (kept between visits): volume (stored for the coming audio), on-screen touch controls Auto / On / Off, and menu effects Full / Reduced
 - **Debug mode** (`F3`) shows the tile grid, solid tiles and collision boxes
 
 ## Controls
@@ -64,12 +65,13 @@ Zones are linked by paths and stairs. Walking onto an exit fades the screen to b
 | `W` `A` `S` `D` / Arrow keys | Move |
 | `E` | Talk, advance dialogue, sit / stand, drink, read the sign, use a restroom, climb the pool ladder, lean out at a rail |
 | `E` / `Space` | Skip the intro, advance restroom text |
-| `C` | Show or hide credits |
+| `Esc` | Pause menu (Resume, Settings, Quit to Menu) |
+| `↑` `↓` `←` `→` / `Enter` | Move around and pick in the menus |
 | `F3` | Toggle debug view |
 
 A hint like `[E] Sit down` appears whenever there is something to interact with.
 
-**On a phone or tablet** the controls appear automatically: a thumb stick on the left (walk) and an **E** button on the right. Tap `[C] Credits` to open the credits, and tap a text box to advance it. Landscape gives the biggest view.
+**On a phone or tablet** the controls appear automatically: a thumb stick on the left (walk) and an **E** button on the right. Tap `[Esc] Menu` (top right) to pause, and tap a text box to advance it. In the menus a first tap selects an episode and a second tap starts it. Landscape gives the biggest view.
 
 ## Running the game
 
@@ -101,13 +103,20 @@ credit-hours/
 ├── CREDITS.md
 ├── LICENSE
 ├── assets/
+│   ├── menu/                       menu backgrounds (one WebP per timeline) and the episode card pictures
+│   ├── fonts/                      Rubik Glitch and Pixelify Sans (SIL OFL) with their licences
 │   ├── character-spritesheet.png   player sprites
 │   ├── npc-spritesheet.png         NPC sprites
 │   ├── character-credits.txt       per-layer art credits (player)
 │   └── npc-credits.txt             per-layer art credits (NPC)
 ├── docs/                           README screenshots
 └── js/
-    ├── main.js        game loop, interaction wiring
+    ├── main.js        game loop, interaction wiring, startEpisode / pause / quit
+    ├── scene.js       which screen is showing: menu, playing or paused
+    ├── menu.js        main menu, settings, help, credits and the pause menu (all drawn on the canvas)
+    ├── episodes.js    the episodes and the menu background timelines, as data
+    ├── save.js        progress kept in localStorage (versioned)
+    ├── settings.js    player options kept in localStorage
     ├── zones.js       ALL zone maps, exits, holes, rails, fences and props
     ├── map.js         zone loading, tile queries, collision, pool props
     ├── player.js      movement, stairs, swimming, sitting, foot collision
@@ -120,7 +129,7 @@ credit-hours/
     ├── input.js       keyboard + touch input (thumb stick, E button, taps)
     ├── display.js     canvas sizing (whole-pixel scaling, phones)
     ├── sprites.js     spritesheet loading, recoloured student variants
-    ├── renderer.js    all tile drawing, camera, HUD, debug view, credits screen
+    ├── renderer.js    all tile drawing, camera, HUD, debug view
     ├── floor.js       stone paving
     ├── foliage.js     hedges, ivy, vines
     ├── canopy.js      bush mounds and tree crowns

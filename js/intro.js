@@ -41,6 +41,9 @@ export const intro = {
     }
   },
 
+  // Back to the very start (a new run from the menu): black screen, the player on the escalator again
+  reset() { this.active = true; this.t = 0; this.rider.scale = 1; this.rider.alpha = 1; },
+
   // Jump straight to the end (also called when the cutscene finishes naturally)
   skip(player) {
     place(player, spawn.x * TILE + TILE / 2, spawn.y * TILE + TILE / 2);
