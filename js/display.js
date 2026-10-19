@@ -23,6 +23,8 @@ function fit() {
 }
 fit();
 window.addEventListener('resize', fit);
+document.addEventListener('fullscreenchange', () => setTimeout(fit, 100));   // entering / leaving fullscreen (Settings > Fullscreen, F11)
+document.addEventListener('webkitfullscreenchange', () => setTimeout(fit, 100));
 window.addEventListener('orientationchange', () => setTimeout(fit, 150));   // (iOS reports the new size a moment late)
 if (window.visualViewport) window.visualViewport.addEventListener('resize', fit);
 

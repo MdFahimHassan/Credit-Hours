@@ -38,7 +38,7 @@
     #btnE.down, #stick.down { background:rgba(255,255,255,0.25); }
     #rotate { display:none; position:fixed; left:0; right:0; top:calc(env(safe-area-inset-top) + 75vw + 8px); text-align:center;
               font:12px monospace; color:rgba(255,255,255,0.45); pointer-events:none; }
-    @media (orientation: portrait) { body.touch.in-game #rotate { display:block; } }
+    @media (orientation: portrait) { body.touch #rotate { display:block; } }   /* (menu too: the 640x480 menu is small on an upright phone) */
   </style>
 </head>
 <body>

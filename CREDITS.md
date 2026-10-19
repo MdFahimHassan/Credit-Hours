@@ -34,13 +34,17 @@ We distribute the character art under **CC-BY-SA 3.0**, with attribution to all 
 Share-alike means edited versions of the art (including the recoloured student variants made in `js/sprites.js`)
 should be shared under the same license. The game code is under the MIT License (see `LICENSE`).
 
+## Sound and music
+All three sounds come from [Pixabay](https://pixabay.com) and are used under the **Pixabay Content License** (https://pixabay.com/service/license-summary/). They are edited for the game (cut and looped) and live in `assets/audio/`:
+
+- **Menu music** - "Slow downtempo chillwave" by Elisaveta_Stoycheva (`menu-loop.ogg` / `menu-loop.mp3`: a 24-bar section with its end crossfaded into its start so it loops)
+- **UI click** - "Mouse click" by MatthewVakaliuk73627 (`click.mp3`)
+- **Menu glitch** - "Glitch Sound Effect HD" by Virtual_Vibes (`glitch-short.mp3`, `glitch-long.mp3`: two short clips cut from the original)
+
+The hover tick in the menus is generated in code (`js/audio.js`), not a recording.
+
 ## Fonts
 The menu uses two fonts from Google Fonts, both under the **SIL Open Font License 1.1** (the full licence texts are in `assets/fonts/`):
 
 - **Rubik Glitch** (title) - copyright 2020 The Rubik Filtered Project Authors
 - **Pixelify Sans** (menu text) - copyright 2021 The Pixelify Sans Project Authors
-
-## Menu and episode artwork
-The menu backgrounds and the Episode 1 card picture (`assets/menu/`) were made by the authors with AI image tools. The present-day background is based on a public photograph of the building.
-
-*This is a summary, not legal advice. If the game is ever sold or published commercially, re-check each layer's license.*

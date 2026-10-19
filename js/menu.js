@@ -1,4 +1,4 @@
-// menu.js - the main menu (title, episode cards, Settings / Help / Credits) and the pause menu. Everything is drawn on the game canvas in the game's own pixel
+// menu.js - the main menu (title screen with Play / Settings / Help / Credits, then the episode cards) and the pause menu. Everything is drawn on the game canvas in the game's own pixel
 // style; there is no HTML. Keyboard, mouse and touch all work: every clickable thing registers a "hit" rectangle while it is drawn (see `hits` below),
 // so the pointer code never has to know what is on screen.
 //
@@ -16,13 +16,16 @@ import { toGame } from './display.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { EPISODES, TIMELINES } from './episodes.js';
 import { save } from './save.js';
+import { audio } from './audio.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 const UI = "'Pixelify Sans','Courier New',monospace";
 const TITLE_FONT = "'Rubik Glitch'";
-const TEAL = '#5ee7e0', INK = '#e8eef2', MUTE = '#8fa0ad', LINE = '#2a3743';
+const BASE_TEAL = '#5ee7e0', INK = '#e8eef2', MUTE = '#8fa0ad', LINE = '#2a3743';
+let TEAL = BASE_TEAL;                     // the accent colour. With ADAPTIVE_ACCENT it follows the background picture (see updateAccent); otherwise it is always teal.
+const ADAPTIVE_ACCENT = true;             // false = the same teal on every background
 const VERSION = 'v0.1';
 
 const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
@@ -34,8 +37,9 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 let hooks = { onPlay() {}, onResume() {}, onQuit() {} };
 let mode = 'main';              // 'main' (the menu scene) | 'pause' (over the frozen game)
-let screen = 'home';            // 'home' | 'settings' | 'help' | 'credits' | 'confirm'
+let screen = 'title';           // 'title' (landing: Play / Settings / Help / Credits) | 'home' (episode select) | 'settings' | 'help' | 'credits' | 'confirm'
 let time = 0;
+let waiting = false, gateT = 0, fontsReady = false;   // the menu stays black until its first picture and fonts are ready (see `ready`), then fades in
 let fadeIn = 0, leaving = null; // fade from black when the menu opens; { ep, t } while fading out into an episode
 let toast = { t: 0, text: '' };
 const say = (text) => { toast = { t: 2.4, text }; };
@@ -120,6 +124,19 @@ function drawParts() {
   ctx.globalAlpha = 1;
 }
 
+// ---- accent colour: each timeline names the accent that reads best on its picture (TIMELINES[].accent in episodes.js). While one picture melts into the next,
+// the accent blends between the two, so the colour of the buttons and of the title glow changes smoothly instead of jumping. ----
+const hexRGB = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const rgbHex = (a) => '#' + a.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+const accentOf = (idx) => (ADAPTIVE_ACCENT && TIMELINES[idx].accent) || BASE_TEAL;
+function updateAccent() {
+  if (!trans) { TEAL = accentOf(cur); return; }
+  const u = Math.min(1, tTrans / TRANS), e = u * u * (3 - 2 * u), a = hexRGB(accentOf(cur)), b = hexRGB(accentOf(nxt));
+  TEAL = rgbHex(a.map((v, i) => v + (b[i] - v) * e));
+}
+// the translucent fill of a focused button, in the accent colour
+const accentFill = (alpha) => { const [r, g, b] = hexRGB(TEAL); return `rgba(${r},${g},${b},${alpha})`; };
+
 // ---- static overlay: darkening, vignette and scanlines, painted once ----
 const dim = mk(W, H);
 {
@@ -138,7 +155,8 @@ const fog = mk(W, 200);
 // ------------------------------------------------------------------------------------------------------------------------------------------------
 // The wordmark: drawn once into three small canvases (white, red, cyan). The red/cyan copies are only shown in a short glitch burst now and then.
 // ------------------------------------------------------------------------------------------------------------------------------------------------
-const tB = mk(560, 96), tR = mk(560, 96), tC = mk(560, 96);
+const TITLE_GLOW = true;     // soft glow (in the accent colour) behind the white wordmark. Set to false for the plain white title.
+const tB = mk(560, 96), tR = mk(560, 96), tC = mk(560, 96), tG = mk(560, 96), tGt = mk(560, 96);   // tG = the glow shape (white), tGt = the same tinted with the current accent
 function buildTitle() {
   [[tB, INK], [tR, '#ff4d5e'], [tC, '#3ff0ff']].forEach(([cnv, col], k) => {
     const c = cnv.getContext('2d'); c.clearRect(0, 0, 560, 96);
@@ -146,14 +164,30 @@ function buildTitle() {
     const set = () => { c.font = `400 ${size}px ${TITLE_FONT},monospace`; if ('letterSpacing' in c) c.letterSpacing = '3px'; };
     set(); while (c.measureText('CREDIT HOURS').width > 520 && size > 20) { size -= 2; set(); }
     if (k === 0) { c.lineJoin = 'round'; c.strokeStyle = 'rgba(0,0,0,.85)'; c.lineWidth = 6; c.strokeText('CREDIT HOURS', 280, 50); }
-    c.fillStyle = col; c.fillText('CREDIT HOURS', 280, 50);
+    c.fillStyle = k === 0 ? '#f4f8fa' : col; c.fillText('CREDIT HOURS', 280, 50);
   });
+  // the glow shape: blurred white text (two passes so it also reads on bright pictures), tinted later by tintGlow()
+  const g = tG.getContext('2d'); g.clearRect(0, 0, 560, 96);
+  let size = 58; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const setg = () => { g.font = `400 ${size}px ${TITLE_FONT},monospace`; if ('letterSpacing' in g) g.letterSpacing = '3px'; };
+  setg(); while (g.measureText('CREDIT HOURS').width > 520 && size > 20) { size -= 2; setg(); }
+  g.shadowColor = 'rgba(255,255,255,.9)'; g.shadowBlur = 16; g.fillStyle = 'rgba(255,255,255,.5)';
+  g.fillText('CREDIT HOURS', 280, 50); g.fillText('CREDIT HOURS', 280, 50);
+  glowKey = '';
+}
+let glowKey = '';
+function tintGlow() {                       // repaint the glow in the current accent, only when the accent has changed
+  if (glowKey === TEAL) return;
+  glowKey = TEAL;
+  const c = tGt.getContext('2d'); c.globalCompositeOperation = 'source-over'; c.clearRect(0, 0, 560, 96);
+  c.drawImage(tG, 0, 0); c.globalCompositeOperation = 'source-in'; c.fillStyle = TEAL; c.fillRect(0, 0, 560, 96); c.globalCompositeOperation = 'source-over';
 }
 let burstAt = 2, burstEnd = 0, burstSeed = 1;
-function burst(len) { burstEnd = time + len; burstSeed = (Math.random() * 1e6) | 0; }
+function burst(len) { burstEnd = time + len; burstSeed = (Math.random() * 1e6) | 0; if (level() < 2) audio.glitch(len > 0.3 ? 'long' : 'short'); }   // the sound only plays when the glitch picture does
 function drawTitle() {
   const x = W / 2 - 280, y = 36;
   if (time > burstAt && time >= burstEnd && burstEnd < burstAt) burst(0.24);
+  if (TITLE_GLOW) { tintGlow(); ctx.drawImage(tGt, x, y); }
   const on = time < burstEnd;
   if (!on) { if (time >= burstEnd && burstAt <= burstEnd) burstAt = time + R(2.8, 5.5); ctx.drawImage(tB, x, y); return; }
   if (level() >= 2) { ctx.drawImage(tB, x, y); return; }
@@ -168,9 +202,9 @@ function drawTitle() {
 // Pointer: every drawn control pushes { x, y, w, h, hover(), click(p, e), drag(p) } into `hits`; the pointer code just looks them up.
 // ------------------------------------------------------------------------------------------------------------------------------------------------
 let hits = [];
-let drag = null;
+let drag = null, pendingUp = null;
 const hitAt = (px, py) => { for (let i = hits.length - 1; i >= 0; i--) { const h = hits[i]; if (px >= h.x && px <= h.x + h.w && py >= h.y && py <= h.y + h.h) return h; } return null; };
-const active = () => (mode === 'main' ? (leaving ? false : true) : mode === 'pause');
+const active = () => (mode === 'main' ? !leaving && !waiting : mode === 'pause');
 function pointerPos(e) { return toGame(e.clientX, e.clientY); }
 canvas.addEventListener('pointermove', (e) => {
   if (!active()) return;
@@ -186,11 +220,12 @@ canvas.addEventListener('pointerdown', (e) => {
   const p = pointerPos(e); if (!p) return;
   const h = hitAt(p.x, p.y); if (!h) return;
   if (h.drag) { drag = h; h.drag(p); return; }
+  if (h.up) { pendingUp = () => h.click(e); return; }
   if (h.hover && e.pointerType !== 'mouse') h.hover();      // a touch selects first...
   if (h.click) h.click(e);                                  // ...the click itself decides whether a second tap is needed (see cards)
 });
-addEventListener('pointerup', () => { drag = null; });
-addEventListener('pointercancel', () => { drag = null; });
+addEventListener('pointerup', () => { if (drag && drag.sound) audio.click(); drag = null; if (pendingUp) { const f = pendingUp; pendingUp = null; f(); } });   // letting go of the volume slider plays a click so you can hear the level
+addEventListener('pointercancel', () => { drag = null; pendingUp = null; });
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------
 // Drawing helpers
@@ -213,9 +248,10 @@ function wrap(str, x, y, maxW, lineH) {
 }
 // A button: chamfered box, teal when focused. Registers its own hit rectangle.
 function button(label, x, y, w, h, focused, onHover, onClick) {
-  chamfer(x, y, w, h, 5); ctx.fillStyle = focused ? 'rgba(94,231,224,.14)' : 'rgba(8,12,20,.78)'; ctx.fill();
+  chamfer(x, y, w, h, 5); ctx.fillStyle = focused ? accentFill(0.14) : 'rgba(8,12,20,.78)'; ctx.fill();
   ctx.strokeStyle = focused ? TEAL : LINE; ctx.lineWidth = focused ? 2 : 1; chamfer(x + 0.5, y + 0.5, w - 1, h - 1, 5); ctx.stroke();
-  text(label, x + w / 2, y + h / 2 + 5, `600 14px ${UI}`, focused ? INK : '#b6c3cc', 'center', 1);
+  let fs = 16; ctx.font = `600 ${fs}px ${UI}`; LS(1); while (fs > 12 && ctx.measureText(label).width > w - 16) { fs--; ctx.font = `600 ${fs}px ${UI}`; } LS(0);   // (shrinks only if the label would not fit)
+  text(label, x + w / 2, y + h / 2 + Math.round(fs / 3), `600 ${fs}px ${UI}`, focused ? INK : '#b6c3cc', 'center', 1);
   if (focused) arrow(x - 14, y + h / 2);
   hits.push({ x, y, w, h, hover: onHover, click: onClick });
 }
@@ -235,7 +271,7 @@ const SEL_H = 132, OFF_H = 62, GAP = 10, CX = 60, CW = 520, CY = 142;
 let sel = 0, area = 'cards', footSel = 0, lastTap = -1;
 const hs = [SEL_H, OFF_H, OFF_H];
 const cardY = [0, 0, 0];
-const FOOT = [{ id: 'settings', label: 'Settings' }, { id: 'help', label: 'Help' }, { id: 'credits', label: 'Credits' }];
+const FOOT = [{ id: 'title', label: '< Back' }];
 
 function drawCard(i) {
   const ep = EPISODES[i], x = CX, y = cardY[i], w = CW, h = Math.round(hs[i]);
@@ -253,24 +289,24 @@ function drawCard(i) {
     g.addColorStop(0, 'rgba(5,8,14,.95)'); g.addColorStop(0.36, 'rgba(5,8,14,.78)'); g.addColorStop(0.8, 'rgba(5,8,14,0)');
     ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
   } else {
-    const off = (time * 5 + i * 90) % W;
+    const off = level() >= 2 ? i * 90 : (time * 5 + i * 90) % W;     // (reduced effects: the fog on locked cards stands still)
     ctx.drawImage(fog, 0, 0, W, 200, x - off, y - 20, W, 200); ctx.drawImage(fog, 0, 0, W, 200, x - off + W, y - 20, W, 200);
     ctx.fillStyle = 'rgba(5,8,14,.25)'; ctx.fillRect(x, y, w, h);
     ctx.font = `700 ${Math.round(44 + 30 * e)}px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = `rgba(143,160,173,${0.14 + 0.07 * Math.sin(time * 1.6 + i)})`; ctx.fillText('?', x + w - 64, y + h / 2 + 2);
+    ctx.fillStyle = `rgba(143,160,173,${0.14 + (level() >= 2 ? 0 : 0.07 * Math.sin(time * 1.6 + i))})`; ctx.fillText('?', x + w - 64, y + h / 2 + 2);
   }
   ctx.restore();
   ctx.strokeStyle = isSel ? TEAL : LINE; ctx.lineWidth = isSel ? 2 : 1; chamfer(x + 0.5, y + 0.5, w - 1, h - 1, 6); ctx.stroke();
-  if (isSel) arrow(x - 14 + Math.round(Math.sin(time * 5) * 2), y + Math.round(h / 2));
+  if (isSel) arrow(x - 14 + (level() >= 2 ? 0 : Math.round(Math.sin(time * 5) * 2)), y + Math.round(h / 2));
   const tx = x + 22, lerp = (a, b) => a + (b - a) * e;
-  text('EPISODE ' + ep.n, tx, Math.round(y + lerp(23, 34)), `600 10px ${UI}`, playable ? TEAL : MUTE, 'left', 3);
-  text(ep.title, tx, Math.round(y + lerp(46, 68)), `600 ${Math.round(lerp(17, 27))}px ${UI}`, playable ? INK : '#9aa8b3');
+  text('EPISODE ' + ep.n, tx, Math.round(y + lerp(24, 34)), `600 13px ${UI}`, playable ? TEAL : MUTE, 'left', 3);
+  text(ep.title, tx, Math.round(y + lerp(48, 68)), `600 ${Math.round(lerp(18, 27))}px ${UI}`, playable ? INK : '#9aa8b3');
   if (e > 0.15) {
     ctx.globalAlpha = e;
-    if (ep.tagline) text(ep.tagline, tx, y + 92, `400 12px ${UI}`, '#c4d0d8');
-    const lab = playable ? 'PLAY' : 'LOCKED', pw = playable ? 54 : 70, py = y + h - 30;
-    ctx.strokeStyle = playable ? TEAL : '#4a5864'; ctx.lineWidth = 1; ctx.strokeRect(tx + 0.5, py + 0.5, pw, 18);
-    text(lab, tx + 9, py + 13, `600 10px ${UI}`, playable ? TEAL : '#6f7f8b', 'left', 2);
+    if (ep.tagline) text(ep.tagline, tx, y + 90, `400 14px ${UI}`, '#c4d0d8');
+    const lab = playable ? 'PLAY' : 'LOCKED', pw = playable ? 66 : 86, py = y + h - 32;
+    ctx.strokeStyle = playable ? TEAL : '#4a5864'; ctx.lineWidth = 1; ctx.strokeRect(tx + 0.5, py + 0.5, pw, 22);
+    text(lab, tx + 10, py + 16, `600 13px ${UI}`, playable ? TEAL : '#6f7f8b', 'left', 2);
     ctx.globalAlpha = 1;
   }
   hits.push({
@@ -281,38 +317,57 @@ function drawCard(i) {
 }
 function activateCard(i) {
   const ep = EPISODES[i];
+  audio.click();
   if (ep.status !== 'playable') { say('Coming soon'); return; }
   leaving = { ep, t: 0 }; burst(0.45);
+  audio.stopMusic(0.5);                                          // the music fades out together with the screen
 }
 function drawFooter() {
-  ctx.font = `600 12px ${UI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  let x = CX; const y = 456;
+  ctx.font = `600 15px ${UI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  let x = CX; const y = 458;
   for (let i = 0; i < FOOT.length; i++) {
     LS(2); const w = ctx.measureText(FOOT[i].label).width; LS(0);
     const f = area === 'foot' && footSel === i;
-    text(FOOT[i].label, x, y, `600 12px ${UI}`, f ? TEAL : MUTE, 'left', 2);
+    text(FOOT[i].label, x, y, `600 15px ${UI}`, f ? TEAL : MUTE, 'left', 2);
     if (f) { ctx.fillStyle = TEAL; ctx.fillRect(x, y + 3, w, 1); }
     const id = FOOT[i].id, idx = i;
-    hits.push({ x: x - 6, y: y - 16, w: w + 12, h: 26, hover: () => { area = 'foot'; footSel = idx; }, click: () => go(id) });
+    hits.push({ x: x - 10, y: y - 22, w: w + 20, h: 36, hover: () => { area = 'foot'; footSel = idx; }, click: () => go(id) });
     x += w + 34;
   }
-  text(VERSION, CX + CW, y, `400 10px ${UI}`, '#55636f', 'right');
+  text(VERSION, CX + CW, y, `400 12px ${UI}`, '#55636f', 'right');
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------
 // Screens: settings, help, credits, confirm
 // ------------------------------------------------------------------------------------------------------------------------------------------------
 let row = 0;                      // focused row on the current screen (settings rows, pause items, confirm buttons)
-function go(s) { screen = s; row = 0; hits = []; }
-const backTo = () => go(mode === 'pause' ? 'pausemenu' : 'home');
+function go(s) { screen = s; row = 0; hits = []; if (s === 'credits') creditPage = 0; audio.click(); }
+const backTo = () => go(mode === 'pause' ? 'pausemenu' : 'title');
+
+// ---- fullscreen (not a saved setting: browsers only allow it from a tap / key press, so it always starts off) ----
+const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+const fsSupported = () => !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);   // (iPhones do not allow it: the row is hidden there)
+function toggleFullscreen() {
+  try {
+    if (fsEl()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+    const el = document.documentElement, req = el.requestFullscreen || el.webkitRequestFullscreen;
+    const p = req.call(el);
+    // In fullscreen the browser normally eats Esc to leave it, which would stop Esc from pausing. Chrome / Edge can hand a short Esc press to the page
+    // (holding Esc still leaves fullscreen).
+    if (p && p.then) p.then(() => { if (navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock(['Escape']).catch(() => {}); }).catch(() => say('Fullscreen is not available here'));
+  } catch { say('Fullscreen is not available here'); }
+}
 
 const SET_ROWS = [
-  { id: 'volume', label: 'Volume', type: 'slider', note: 'no sound in the game yet' },
+  { id: 'volume', label: 'Volume', type: 'slider' },
   { id: 'touch', label: 'Touch controls', type: 'choice', opts: ['auto', 'on', 'off'], names: ['Auto', 'On', 'Off'] },
   { id: 'effects', label: 'Menu effects', type: 'choice', opts: ['full', 'reduced'], names: ['Full', 'Reduced'] },
+  ...(fsSupported() ? [{ id: 'fullscreen', label: 'Fullscreen', type: 'fs' }] : []),
   { id: 'back', label: 'Back', type: 'button' },
 ];
 function adjust(r, dir) {
+  audio.click();
+  if (r.type === 'fs') { toggleFullscreen(); return; }
   if (r.type === 'slider') setSetting(r.id, clamp(Math.round((settings[r.id] + dir * 0.1) * 10) / 10, 0, 1));
   else if (r.type === 'choice') { const i = r.opts.indexOf(settings[r.id]); setSetting(r.id, r.opts[(i + dir + r.opts.length) % r.opts.length]); }
 }
@@ -321,23 +376,23 @@ function drawSettings() {
   const x0 = PANEL.x + 24, vx = PANEL.x + 250;
   SET_ROWS.forEach((r, i) => {
     const y = PANEL.y + 60 + i * 48, focused = row === i;
-    if (r.type === 'button') { button('Back', PANEL.x + PANEL.w / 2 - 70, PANEL.y + PANEL.h - 56, 140, 34, focused, () => { row = i; }, backTo); return; }
-    text(r.label, x0, y + 20, `600 14px ${UI}`, focused ? INK : '#b6c3cc');
+    if (r.type === 'button') { button('Back', PANEL.x + PANEL.w / 2 - 80, PANEL.y + PANEL.h - 54, 160, 42, focused, () => { row = i; }, backTo); return; }
+    text(r.label, x0, y + 20, `600 16px ${UI}`, focused ? INK : '#b6c3cc');
     if (focused) arrow(x0 - 14, y + 15);
     if (r.type === 'slider') {
       const bw = 150, v = settings[r.id];
       ctx.fillStyle = '#16202a'; ctx.fillRect(vx, y + 12, bw, 8);
       ctx.fillStyle = TEAL; ctx.fillRect(vx, y + 12, Math.round(bw * v), 8);
       ctx.fillStyle = INK; ctx.fillRect(vx + Math.round(bw * v) - 2, y + 8, 4, 16);
-      text(Math.round(v * 100) + '%', vx + bw + 14, y + 20, `600 12px ${UI}`, MUTE);
+      text(Math.round(v * 100) + '%', vx + bw + 14, y + 20, `600 14px ${UI}`, MUTE);
       if (r.note) text(r.note, vx, y + 38, `400 10px ${UI}`, '#66737e');
-      hits.push({ x: vx - 6, y: y + 4, w: bw + 12, h: 26, hover: () => { row = i; }, drag: (p) => setSetting(r.id, clamp(Math.round((p.x - vx) / bw * 10) / 10, 0, 1)) });
+      hits.push({ x: vx - 8, y: y - 2, w: bw + 16, h: 40, hover: () => { row = i; }, sound: true, drag: (p) => setSetting(r.id, clamp(Math.round((p.x - vx) / bw * 10) / 10, 0, 1)) });
     } else {
-      const name = r.names[r.opts.indexOf(settings[r.id])];
-      text('<', vx, y + 20, `700 14px ${UI}`, focused ? TEAL : '#55636f');
-      text(name, vx + 70, y + 20, `600 14px ${UI}`, INK, 'center');
-      text('>', vx + 140, y + 20, `700 14px ${UI}`, focused ? TEAL : '#55636f', 'right');
-      hits.push({ x: vx - 6, y: y + 2, w: 160, h: 28, hover: () => { row = i; }, click: (e) => { row = i; adjust(r, 1); } });
+      const name = r.type === 'fs' ? (fsEl() ? 'On' : 'Off') : r.names[r.opts.indexOf(settings[r.id])];
+      text('<', vx, y + 20, `700 16px ${UI}`, focused ? TEAL : '#55636f');
+      text(name, vx + 70, y + 20, `600 16px ${UI}`, INK, 'center');
+      text('>', vx + 140, y + 20, `700 16px ${UI}`, focused ? TEAL : '#55636f', 'right');
+      hits.push({ x: vx - 8, y: y - 4, w: 176, h: 40, hover: () => { row = i; }, up: r.type === 'fs', click: (e) => { row = i; adjust(r, 1); } });   // (fullscreen waits for the finger to lift: touch screens only count that as a real tap)
     }
   });
 }
@@ -361,56 +416,124 @@ function drawHelp() {
   panel('HELP');
   HELP.forEach(([k, v], i) => {
     const y = PANEL.y + 78 + i * 36;
-    text(k, PANEL.x + 24, y, `600 13px ${UI}`, TEAL);
-    text(v, PANEL.x + 24, y + 17, `400 13px ${UI}`, '#d3dde4');
+    text(k, PANEL.x + 24, y, `600 14px ${UI}`, TEAL);
+    text(v, PANEL.x + 24, y + 18, `400 14px ${UI}`, '#d3dde4');
   });
-  button('Back', PANEL.x + PANEL.w / 2 - 70, PANEL.y + PANEL.h - 50, 140, 32, true, () => {}, backTo);
+  button('Back', PANEL.x + PANEL.w / 2 - 80, PANEL.y + PANEL.h - 54, 160, 42, true, () => {}, backTo);
 }
-function drawCredits() {
-  panel('CREDITS');
-  ctx.font = `400 11px ${UI}`; ctx.fillStyle = '#d3dde4'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  const x = PANEL.x + 24, w = PANEL.w - 48;
-  let y = PANEL.y + 68;
-  for (const p of [
+// The credits do not fit on one panel any more, so they are split into pages (Prev / Next, or Left / Right).
+const CREDIT_PAGES = [
+  [
     'Credit Hours - made by Md. Fahim Hassan & Shahriar Islam Tawsif, CSE students. A passion project.',
     'Player and NPC sprites: made with the Universal LPC Spritesheet Character Generator. Sprites contributed as part of the Liberated Pixel Cup project from OpenGameArt.org: http://opengameart.org/content/lpc-collection',
     'License: Creative Commons Attribution-ShareAlike 3.0 (CC-BY-SA 3.0) http://creativecommons.org/licenses/by-sa/3.0/',
-    'Per-artist credits: CREDITS.md, assets/character-credits.txt (player), assets/npc-credits.txt (NPC).',
+  ],
+  [
+    'Per-artist sprite credits: CREDITS.md, assets/character-credits.txt (player), assets/npc-credits.txt (NPC).',
     'Fonts: Rubik Glitch and Pixelify Sans, SIL Open Font License 1.1 (see assets/fonts).',
     'Menu and episode artwork: made by the authors with AI image tools.',
-  ]) y = wrap(p, x, y, w, 15) + 5;
-  button('Back', PANEL.x + PANEL.w / 2 - 70, PANEL.y + PANEL.h - 46, 140, 32, true, () => {}, backTo);
+  ],
+  [
+    'Menu music: "Slow downtempo chillwave" by Elisaveta_Stoycheva (Pixabay), edited into a loop.',
+    'UI click: "Mouse click" by MatthewVakaliuk73627 (Pixabay).',
+    'Glitch sound: "Glitch Sound Effect HD" by Virtual_Vibes (Pixabay), cut into short clips.',
+    'All Pixabay sounds are used under the Pixabay Content License: https://pixabay.com/service/license-summary/',
+  ],
+];
+let creditPage = 0;
+const creditTurn = (d) => { const n = clamp(creditPage + d, 0, CREDIT_PAGES.length - 1); if (n !== creditPage) { creditPage = n; audio.click(); } };
+function drawCredits() {
+  panel('CREDITS');
+  const last = creditPage === CREDIT_PAGES.length - 1;
+  text(`${creditPage + 1} / ${CREDIT_PAGES.length}`, PANEL.x + PANEL.w - 24, PANEL.y + 34, `600 14px ${UI}`, MUTE, 'right', 1);
+  ctx.font = `400 13px ${UI}`; ctx.fillStyle = '#d3dde4'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  const x = PANEL.x + 24, w = PANEL.w - 48;
+  let y = PANEL.y + 70;
+  for (const p of CREDIT_PAGES[creditPage]) y = wrap(p, x, y, w, 17) + 7;
+  const by = PANEL.y + PANEL.h - 54, bx = PANEL.x + PANEL.w / 2;
+  button('Back', bx - 70, by, 140, 42, last, () => {}, backTo);
+  if (creditPage > 0) button('< Prev', PANEL.x + 24, by, 120, 42, false, () => {}, () => creditTurn(-1));
+  if (!last) button('Next >', PANEL.x + PANEL.w - 144, by, 120, 42, true, () => {}, () => creditTurn(1));
+}
+function updateCredits() {
+  if (pressed('ArrowLeft', 'KeyA')) creditTurn(-1);
+  if (pressed('ArrowRight', 'KeyD')) creditTurn(1);
+  if (pressed('Escape', 'Backspace')) backTo();
+  else if (pressed('Enter', 'Space', 'KeyE')) { if (creditPage < CREDIT_PAGES.length - 1) creditTurn(1); else backTo(); }
 }
 function updatePanel() { if (pressed('Escape', 'Backspace', 'Enter', 'Space', 'KeyE')) backTo(); }
 
 // ---- pause menu items + the "really quit?" step ----
 const PAUSE_ITEMS = [{ id: 'resume', label: 'Resume' }, { id: 'settings', label: 'Settings' }, { id: 'quit', label: 'Quit to Menu' }];
-function pickPause(id) { if (id === 'resume') hooks.onResume(); else if (id === 'settings') go('settings'); else go('confirm'); }
+function pickPause(id) { if (id === 'resume') { audio.click(); hooks.onResume(); } else if (id === 'settings') go('settings'); else go('confirm'); }
 function drawPauseList() {
-  const w = 260, x = (W - w) / 2, y0 = 190;
+  const w = 280, x = (W - w) / 2, y0 = 190;
   text('PAUSED', W / 2, 150, `700 30px ${UI}`, INK, 'center', 6);
-  PAUSE_ITEMS.forEach((it, i) => button(it.label, x, y0 + i * 48, w, 36, row === i, () => { row = i; }, () => pickPause(it.id)));
+  PAUSE_ITEMS.forEach((it, i) => button(it.label, x, y0 + i * 54, w, 44, row === i, () => { row = i; }, () => pickPause(it.id)));
 }
 function updatePauseList() {
   if (pressed('ArrowUp', 'KeyW')) row = (row + PAUSE_ITEMS.length - 1) % PAUSE_ITEMS.length;
   if (pressed('ArrowDown', 'KeyS')) row = (row + 1) % PAUSE_ITEMS.length;
   if (pressed('Enter', 'Space', 'KeyE')) pickPause(PAUSE_ITEMS[row].id);
-  if (pressed('Escape')) hooks.onResume();
+  if (pressed('Escape')) { audio.click(); hooks.onResume(); }
 }
 function drawConfirm() {
-  const w = 340, h = 150, x = (W - w) / 2, y = 170;
+  const w = 340, h = 160, x = (W - w) / 2, y = 165;
   chamfer(x, y, w, h, 8); ctx.fillStyle = 'rgba(5,8,14,.94)'; ctx.fill();
   ctx.strokeStyle = TEAL; ctx.lineWidth = 2; chamfer(x + 1, y + 1, w - 2, h - 2, 8); ctx.stroke();
   text('Quit to the menu?', W / 2, y + 40, `700 18px ${UI}`, INK, 'center', 1);
-  text('Your progress in this run will be lost.', W / 2, y + 64, `400 12px ${UI}`, MUTE, 'center');
-  button('No, keep playing', x + 18, y + 90, 140, 36, row === 0, () => { row = 0; }, () => go('pausemenu'));
-  button('Yes, quit', x + w - 158, y + 90, 140, 36, row === 1, () => { row = 1; }, () => hooks.onQuit());
+  text('Your progress in this run will be lost.', W / 2, y + 66, `400 14px ${UI}`, MUTE, 'center');
+  button('No, keep playing', x + 14, y + 88, 150, 44, row === 0, () => { row = 0; }, () => go('pausemenu'));
+  button('Yes, quit', x + w - 164, y + 88, 150, 44, row === 1, () => { row = 1; }, () => { audio.click(); hooks.onQuit(); });
 }
 function updateConfirm() {
   if (pressed('ArrowLeft', 'KeyA', 'ArrowUp', 'KeyW')) row = 0;
   if (pressed('ArrowRight', 'KeyD', 'ArrowDown', 'KeyS')) row = 1;
-  if (pressed('Enter', 'Space', 'KeyE')) { if (row === 1) hooks.onQuit(); else go('pausemenu'); }
+  if (pressed('Enter', 'Space', 'KeyE')) { if (row === 1) { audio.click(); hooks.onQuit(); } else go('pausemenu'); }
   if (pressed('Escape')) go('pausemenu');
+}
+
+// ------------------------------------------------------------------------------------------------------------------------------------------------
+// Title screen: the first thing the player sees. Just the picture, the wordmark and the usual buttons.
+// ------------------------------------------------------------------------------------------------------------------------------------------------
+const TITLE_ITEMS = [{ id: 'play', label: 'Play' }, { id: 'settings', label: 'Settings' }, { id: 'help', label: 'Help' }, { id: 'credits', label: 'Credits' }];
+function pickTitle(id) {
+  if (id === 'play') { go('home'); area = 'cards'; sel = 0; lastTap = -1; for (let i = 0; i < 3; i++) hs[i] = i === 0 ? SEL_H : OFF_H; }
+  else go(id);
+}
+// Soft dark haze behind the button stack (painted once). It replaces the old solid boxes: the picture stays visible, the words stay readable.
+const haze = mk(W, H);
+{
+  const hc = haze.getContext('2d');
+  hc.save(); hc.translate(W / 2, 330); hc.scale(1, 0.85);
+  const g = hc.createRadialGradient(0, 0, 0, 0, 0, 190);
+  g.addColorStop(0, 'rgba(3,5,10,.42)'); g.addColorStop(0.6, 'rgba(3,5,10,.2)'); g.addColorStop(1, 'rgba(3,5,10,0)');
+  hc.fillStyle = g; hc.fillRect(-W, -H, W * 2, H * 2); hc.restore();
+}
+// A title-screen option: plain outlined text, no box. The focused one is bright with arrows either side and a thin underline.
+function titleOption(label, cy, focused, onHover, onClick) {
+  const font = `700 ${focused ? 24 : 22}px ${UI}`, sp = 4;
+  ctx.font = font; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; LS(sp);
+  const tw = ctx.measureText(label).width - sp, by = cy + 8;       // (letter spacing adds a trailing gap; ignore it for centring)
+  ctx.lineJoin = 'round'; ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,.8)'; ctx.strokeText(label, W / 2 + sp / 2, by);
+  ctx.fillStyle = focused ? INK : '#aebbc5'; ctx.fillText(label, W / 2 + sp / 2, by); LS(0);
+  if (focused) {
+    const bob = level() >= 2 ? 0 : Math.round(Math.sin(time * 5) * 2), ax = W / 2 - tw / 2 - 26 + bob;
+    arrow(ax, cy);
+    ctx.save(); ctx.translate(W - ax, 0); ctx.scale(-1, 1); arrow(0, cy); ctx.restore();
+    ctx.fillStyle = TEAL; ctx.fillRect(Math.round(W / 2 - tw / 2), by + 6, Math.round(tw), 2);
+  }
+  hits.push({ x: W / 2 - 130, y: cy - 23, w: 260, h: 46, hover: onHover, click: onClick });
+}
+function drawTitleScreen() {
+  ctx.drawImage(haze, 0, 0);
+  TITLE_ITEMS.forEach((it, i) => titleOption(it.label, 244 + i * 46, row === i, () => { row = i; }, () => pickTitle(it.id)));
+  text(VERSION, W - 20, H - 16, `400 12px ${UI}`, '#55636f', 'right');
+}
+function updateTitleScreen() {
+  if (pressed('ArrowUp', 'KeyW')) row = (row + TITLE_ITEMS.length - 1) % TITLE_ITEMS.length;
+  if (pressed('ArrowDown', 'KeyS')) row = (row + 1) % TITLE_ITEMS.length;
+  if (pressed('Enter', 'Space', 'KeyE')) pickTitle(TITLE_ITEMS[row].id);
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------
@@ -418,6 +541,7 @@ function updateConfirm() {
 // ------------------------------------------------------------------------------------------------------------------------------------------------
 function updateHome() {
   const up = pressed('ArrowUp', 'KeyW'), down = pressed('ArrowDown', 'KeyS'), left = pressed('ArrowLeft', 'KeyA'), right = pressed('ArrowRight', 'KeyD');
+  if (pressed('Escape', 'Backspace')) { go('title'); return; }
   if (area === 'cards') {
     if (up) sel = (sel + EPISODES.length - 1) % EPISODES.length;
     if (down) { if (sel === EPISODES.length - 1) area = 'foot'; else sel++; }
@@ -430,6 +554,14 @@ function updateHome() {
   }
 }
 
+// Hover tick: whenever the highlighted item changes on the same screen (keyboard, mouse or touch), a soft tick plays. Changing screens is silent here (go() clicks).
+let lastFocus = null;
+function trackFocus() {
+  const k = screen + '|' + (screen === 'home' ? area + sel + footSel : row);
+  if (lastFocus !== null && k !== lastFocus && k.split('|')[0] === lastFocus.split('|')[0]) audio.hover();
+  lastFocus = k;
+}
+
 // ------------------------------------------------------------------------------------------------------------------------------------------------
 // Frame entry points
 // ------------------------------------------------------------------------------------------------------------------------------------------------
@@ -437,29 +569,41 @@ function track(dt) {
   ema = ema * 0.96 + dt * 0.04;
   if (++slowFrames > 150 && ema > 0.025 && autoLevel < 2) { autoLevel++; slowFrames = 0; ema = 0.016; initParts(trans ? nxt : cur); }
 }
-function startTrans() { nxt = (cur + 1) % TIMELINES.length; trans = true; tTrans = 0; age.nxt = 0; load(TIMELINES[(nxt + 1) % TIMELINES.length].id); }
+function startTrans() { nxt = (cur + 1) % TIMELINES.length; trans = true; tTrans = 0; age.nxt = 0; if (level() < 2) audio.glitch('long', 0.35);   // lands where the picture tears the most
+  load(TIMELINES[(nxt + 1) % TIMELINES.length].id); }
 
 export const menu = {
   init(h) {
     hooks = { ...hooks, ...h };
     for (const ep of EPISODES) if (ep.art) load(ep.art);          // card pictures: assets/menu/<art>.webp
     onSettingChange((k) => { if (k === 'effects') initParts(trans ? nxt : cur); });
+    audio.init();
     buildTitle();
     if (document.fonts && document.fonts.load) {
       Promise.race([Promise.all([`58px ${TITLE_FONT}`, `14px ${UI}`, `700 14px ${UI}`].map((f) => document.fonts.load(f))), new Promise((r) => setTimeout(r, 3000))])
-        .then(buildTitle).catch(() => {});
-    }
+        .then(buildTitle).catch(() => {}).then(() => { fontsReady = true; });
+    } else fontsReady = true;
     initParts(0);
   },
 
   enter() {
-    mode = 'main'; screen = 'home'; area = 'cards'; sel = 0; row = 0; leaving = null; fadeIn = 0.6; hits = []; toast.t = 0;
+    waiting = true; gateT = 0;
+    audio.playMusic(); lastFocus = null;
+    mode = 'main'; screen = 'title'; area = 'cards'; sel = 0; row = 0; leaving = null; fadeIn = 0.6; hits = []; toast.t = 0;
     for (let i = 0; i < 3; i++) hs[i] = i === 0 ? SEL_H : OFF_H;
     load(TIMELINES[cur].id); load(TIMELINES[(cur + 1) % TIMELINES.length].id);
   },
 
   update(dt) {
     time += dt;
+    // Loading gate: the screen stays black until the first background and the fonts are in (or 2.5 s have passed), so the picture and the wordmark never pop in
+    // half-way through the fade. Nothing else runs meanwhile, so the background's timer and the fade both start only when there is something to see.
+    if (waiting) {
+      gateT += dt;
+      const im = imgs[TIMELINES[cur].id];
+      if ((im && im.ok && fontsReady) || gateT > 2.5) { waiting = false; fadeIn = 0.6; }
+      else return;
+    }
     age.cur += dt;
     if (!trans && age.cur > DWELL) { const im = imgs[TIMELINES[(cur + 1) % TIMELINES.length].id]; if (im && im.ok) startTrans(); }
     else if (trans) {
@@ -473,13 +617,17 @@ export const menu = {
     if (fadeIn > 0) fadeIn -= dt;
     track(dt);
     if (leaving) { leaving.t += dt; if (leaving.t >= 0.5) { const ep = leaving.ep; leaving = null; save.markStarted(ep.id); hooks.onPlay(ep); } return; }
-    if (screen === 'home') updateHome();
+    if (screen === 'title') updateTitleScreen();
+    else if (screen === 'home') updateHome();
     else if (screen === 'settings') updateSettings();
+    else if (screen === 'credits') updateCredits();
     else updatePanel();
+    trackFocus();
   },
 
   draw() {
     hits = [];
+    updateAccent();
     ctx.save();
     ctx.fillStyle = '#04060a'; ctx.fillRect(0, 0, W, H);
     if (trans) {
@@ -503,8 +651,9 @@ export const menu = {
     drawParts();
     ctx.drawImage(dim, 0, 0);
     drawTitle();
-    text('AN EPISODIC STORY GAME', W / 2 + 2, 122, `600 11px ${UI}`, MUTE, 'center', 5);
-    if (screen === 'home') {
+    text('SAME CAMPUS. DIFFERENT WORLDS.', W / 2 + 2, 124, `600 14px ${UI}`, MUTE, 'center', 4);
+    if (screen === 'title') drawTitleScreen();
+    else if (screen === 'home') {
       let y = CY; for (let i = 0; i < 3; i++) { cardY[i] = Math.round(y); y += hs[i] + GAP; }
       for (let i = 0; i < EPISODES.length; i++) drawCard(i);
       drawFooter();
@@ -512,27 +661,29 @@ export const menu = {
     else if (screen === 'help') drawHelp();
     else if (screen === 'credits') drawCredits();
     if (toast.t > 0) {
-      ctx.globalAlpha = Math.min(1, toast.t * 2); ctx.font = `600 12px ${UI}`; ctx.textAlign = 'center';
-      const w = ctx.measureText(toast.text).width + 24;
-      ctx.fillStyle = 'rgba(5,8,14,.92)'; ctx.fillRect(W / 2 - w / 2, 418, w, 22);
-      ctx.strokeStyle = TEAL; ctx.lineWidth = 1; ctx.strokeRect(W / 2 - w / 2 + 0.5, 418.5, w - 1, 21);
-      text(toast.text, W / 2, 433, `600 12px ${UI}`, INK, 'center'); ctx.globalAlpha = 1;
+      ctx.globalAlpha = Math.min(1, toast.t * 2); ctx.font = `600 14px ${UI}`; ctx.textAlign = 'center';
+      const w = ctx.measureText(toast.text).width + 28;
+      ctx.fillStyle = 'rgba(5,8,14,.92)'; ctx.fillRect(W / 2 - w / 2, 414, w, 26);
+      ctx.strokeStyle = TEAL; ctx.lineWidth = 1; ctx.strokeRect(W / 2 - w / 2 + 0.5, 414.5, w - 1, 25);
+      text(toast.text, W / 2, 433, `600 14px ${UI}`, INK, 'center'); ctx.globalAlpha = 1;
     }
-    const fade = leaving ? Math.min(1, leaving.t / 0.5) : Math.max(0, fadeIn / 0.6);
+    const fade = waiting ? 1 : leaving ? Math.min(1, leaving.t / 0.5) : Math.max(0, fadeIn / 0.6);
     if (fade > 0) { ctx.fillStyle = `rgba(0,0,0,${fade})`; ctx.fillRect(0, 0, W, H); }
     ctx.restore();
   },
 
   // ---- pause (over the frozen game picture) ----
-  openPause() { mode = 'pause'; screen = 'pausemenu'; row = 0; hits = []; },
+  openPause() { mode = 'pause'; screen = 'pausemenu'; row = 0; hits = []; lastFocus = null; },
   updatePause(dt) {
     time += dt;
     if (screen === 'pausemenu') updatePauseList();
     else if (screen === 'settings') updateSettings();
     else if (screen === 'confirm') updateConfirm();
+    trackFocus();
   },
   drawPause() {
     hits = [];
+    TEAL = BASE_TEAL;                     // (over the frozen game there is no menu picture to match)
     ctx.save();
     ctx.fillStyle = 'rgba(3,5,10,.68)'; ctx.fillRect(0, 0, W, H);
     if (screen === 'pausemenu') drawPauseList();
