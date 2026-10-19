@@ -85,16 +85,21 @@ function spawn(type, color, anywhere) {
     case 'snow': p.vy = R(18, 40); p.s = Math.random() < 0.3 ? 2 : 1; p.a = 0.85; break;
     case 'bubble': p.vy = -R(14, 40); p.y = anywhere ? R(0, H) : H + 6; p.s = Math.random() < 0.4 ? 4 : 3; break;
     case 'firefly': p.vx = R(-8, 8); p.vy = R(-8, 8); p.s = 2; break;
+    case 'glow': p.vx = R(-6, 6); p.vy = R(-6, 6); p.s = R(5, 10); break;                       // soft, vague glowing blob (jungle fireflies)
+    case 'mote': p.vy = -R(5, 16); p.vx = R(-3, 3); p.y = anywhere ? R(0, H) : H + 8; p.s = R(4, 8); break;   // slow rising magic mote (fantasy)
+    case 'star': p.s = Math.random() < 0.3 ? 4 : 3; p.y = R(0, H * 0.42); break;                 // four-point twinkle
+    case 'firework': p.vx = R(1.5, 3.5); break;                                                   // controller: `vx` = seconds until the next rocket
     case 'ember': p.vy = -R(12, 36); p.vx = R(-4, 6); p.y = anywhere ? R(0, H) : H + 4; p.s = Math.random() < 0.3 ? 2 : 1; break;
   }
   return p;
 }
 function initParts(idx) {
-  parts = []; fxIdx = idx;
+  parts = []; rockets = []; bursts = []; fxIdx = idx;
   if (level() >= 1) return;
   for (const [t, n, c] of TIMELINES[idx].fx) for (let i = 0; i < n; i++) parts.push(spawn(t, c, true));
 }
 function updParts(dt) {
+  updFireworks(dt);
   for (const p of parts) {
     p.t += dt;
     switch (p.type) {
@@ -105,20 +110,76 @@ function updParts(dt) {
       case 'firefly':
         p.vx += R(-30, 30) * dt; p.vy += R(-30, 30) * dt; p.vx *= 0.97; p.vy *= 0.97; p.x += p.vx * dt; p.y += p.vy * dt;
         if (p.x < 0) p.x = W; if (p.x > W) p.x = 0; if (p.y < 0) p.y = H; if (p.y > H) p.y = 0; break;
+      case 'glow':
+        p.vx += R(-14, 14) * dt; p.vy += R(-14, 14) * dt; p.vx *= 0.97; p.vy *= 0.97; p.x += p.vx * dt; p.y += p.vy * dt;
+        if (p.x < -10) p.x = W + 10; if (p.x > W + 10) p.x = -10; if (p.y < -10) p.y = H + 10; if (p.y > H + 10) p.y = -10; break;
+      case 'mote': p.y += p.vy * dt; p.x += (p.vx + Math.sin(p.t * 1.4 + p.ph) * 9) * dt; if (p.y < -10) { p.y = H + 8; p.x = R(0, W); } break;
+      case 'firework':
+        p.vx -= dt;
+        if (p.vx <= 0) { p.vx = R(3.5, 7); rockets.push({ x: R(W * 0.12, W * 0.88), y: H * 0.36, ty: R(H * 0.07, H * 0.22), t: 0 }); }
+        break;
       case 'ember': p.y += p.vy * dt; p.x += (p.vx + Math.sin(p.t * 3 + p.ph) * 8) * dt; if (p.y < -4) { p.y = H + 4; p.x = R(0, W); } break;
     }
   }
 }
+// ---- soft glow sprites (pre-rendered per colour) and the cozy fireworks (rocket -> small burst of sparks that fall and fade) ----
+const glowCache = {};
+function glowSprite(color) {
+  if (glowCache[color]) return glowCache[color];
+  const n = 32, c = mk(n, n), g = c.getContext('2d'), [r, gg, b] = hexRGB(color), gr = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+  gr.addColorStop(0, `rgba(${r},${gg},${b},1)`); gr.addColorStop(0.25, `rgba(${r},${gg},${b},.5)`); gr.addColorStop(1, `rgba(${r},${gg},${b},0)`);
+  g.fillStyle = gr; g.fillRect(0, 0, n, n);
+  return (glowCache[color] = c);
+}
+let rockets = [], bursts = [];
+const FW_COLORS = ['#ffd27a', '#ff9ad0', '#8fd8ff', '#b9ff9a'];
+function updFireworks(dt) {
+  for (let i = rockets.length - 1; i >= 0; i--) {
+    const k = rockets[i]; k.t += dt; k.y -= 70 * dt;
+    if (k.y <= k.ty) {
+      const col = FW_COLORS[(Math.random() * FW_COLORS.length) | 0], n = 22 + ((Math.random() * 10) | 0), sp = R(26, 40), sparks = [];
+      for (let j = 0; j < n; j++) { const an = (j / n) * 6.283 + R(-0.1, 0.1), v = sp * R(0.75, 1.1); sparks.push({ vx: Math.cos(an) * v, vy: Math.sin(an) * v }); }
+      bursts.push({ x: k.x, y: k.y, t: 0, col, sparks }); rockets.splice(i, 1);
+    }
+  }
+  for (let i = bursts.length - 1; i >= 0; i--) { bursts[i].t += dt; if (bursts[i].t > 2.2) bursts.splice(i, 1); }
+}
+function drawFireworks() {
+  ctx.globalCompositeOperation = 'lighter';
+  for (const k of rockets) { ctx.globalAlpha = 0.5; ctx.fillStyle = '#ffe9b0'; ctx.fillRect(Math.round(k.x), Math.round(k.y), 1, 3); }
+  for (const b of bursts) {
+    const f = 1 - b.t / 2.2, spr = glowSprite(b.col);
+    ctx.globalAlpha = 0.18 * f * f; ctx.drawImage(spr, b.x - 34, b.y - 34 + b.t * 8, 68, 68);      // faint halo in the sky
+    ctx.fillStyle = b.col;
+    for (const q of b.sparks) {
+      const d = 1 - Math.exp(-2.4 * b.t), x = b.x + q.vx * d / 2.4 * 2.4 * 0.9, y = b.y + q.vy * d / 2.4 * 2.4 * 0.9 + 14 * b.t * b.t;
+      ctx.globalAlpha = Math.max(0, 0.75 * f * (0.7 + 0.3 * Math.sin(b.t * 30 + q.vx)));
+      ctx.fillRect(Math.round(x), Math.round(y), 1.5, 1.5);
+    }
+  }
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+}
 function drawParts() {
+  drawFireworks();
   for (const p of parts) {
     let a = p.a;
     const x = Math.round(p.x), y = Math.round(p.y);
     if (p.type === 'spark') a = 0.15 + 0.85 * (0.5 + 0.5 * Math.sin(p.t * 2 + p.ph));
     else if (p.type === 'firefly') a = Math.max(0, Math.sin(p.t * 1.6 + p.ph)) * 0.95;
     else if (p.type === 'ember') a = 0.5 + 0.5 * Math.sin(p.t * 7 + p.ph);
+    else if (p.type === 'glow') a = 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(p.t * 1.1 + p.ph));
+    else if (p.type === 'mote') a = 0.35 + 0.55 * (0.5 + 0.5 * Math.sin(p.t * 1.7 + p.ph));
+    else if (p.type === 'star') a = Math.max(0, Math.sin(p.t * 1.5 + p.ph)) ** 2;
+    else if (p.type === 'firework') continue;
     ctx.globalAlpha = a; ctx.fillStyle = p.c;
     if (p.type === 'rain') ctx.fillRect(x, y, 1, 7);
-    else if (p.type === 'bubble') { ctx.strokeStyle = p.c; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, p.s - 1, p.s - 1); }
+    else if (p.type === 'bubble') {                                  // round bubble: thin ring + tiny highlight
+      const r = p.s * 1.1;
+      ctx.globalAlpha = 0.75; ctx.strokeStyle = p.c; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 6.283); ctx.stroke();
+      ctx.globalAlpha = 0.9; ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(p.x - r * 0.45), Math.round(p.y - r * 0.5), 1, 1);
+    }
+    else if (p.type === 'glow' || p.type === 'mote') { ctx.globalCompositeOperation = 'lighter'; const d = p.s * 2; ctx.drawImage(glowSprite(p.c), p.x - d / 2, p.y - d / 2, d, d); ctx.globalCompositeOperation = 'source-over'; }
+    else if (p.type === 'star') { ctx.globalCompositeOperation = 'lighter'; const L = p.s + 2; ctx.fillRect(x - L, y, L * 2 + 1, 1); ctx.fillRect(x, y - L, 1, L * 2 + 1); ctx.fillRect(x - 1, y - 1, 3, 3); ctx.globalCompositeOperation = 'source-over'; }
     else ctx.fillRect(x, y, p.s, p.s);
   }
   ctx.globalAlpha = 1;
@@ -651,7 +712,13 @@ export const menu = {
     drawParts();
     ctx.drawImage(dim, 0, 0);
     drawTitle();
-    text('SAME CAMPUS. DIFFERENT WORLDS.', W / 2 + 2, 124, `600 14px ${UI}`, MUTE, 'center', 4);
+    {   // subtitle: near-white with a dark outline + soft shadow so it stays readable on light pictures (snow) as well as dark ones
+      const sub = 'SAME CAMPUS. DIFFERENT WORLDS.';
+      ctx.save(); ctx.font = `600 14px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; LS(4);
+      ctx.lineJoin = 'round'; ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = 8;
+      ctx.strokeStyle = 'rgba(4,7,12,.9)'; ctx.lineWidth = 4; ctx.strokeText(sub, W / 2 + 2, 124);
+      ctx.shadowBlur = 0; ctx.fillStyle = '#eef4f7'; ctx.fillText(sub, W / 2 + 2, 124); LS(0); ctx.restore();
+    }
     if (screen === 'title') drawTitleScreen();
     else if (screen === 'home') {
       let y = CY; for (let i = 0; i < 3; i++) { cardY[i] = Math.round(y); y += hs[i] + GAP; }
