@@ -1,12 +1,12 @@
 # Credits
 
 ## Game
-BRACU Rooftop - made by **Md. Fahim Hassan && Shahriar Islam Tawsif**, BRAC University (CSE).
-The map is based on the real BRACU rooftop (reference: a public vlog walkthrough, used only as a visual guide).
+Credit Hours - made by **Md. Fahim Hassan & Shahriar Islam Tawsif**, CSE students, as a passion project.
+The map is inspired by a real university rooftop.
 
 ## Character art - Universal LPC Spritesheet Character Generator
-The player sprite (`assets/character-spritesheet.png`) was created with the
-**Universal LPC Spritesheet Character Generator**, which combines art from the
+The player sprite (`assets/character-spritesheet.png`) and the NPC sprite (`assets/npc-spritesheet.png`)
+were created with the **Universal LPC Spritesheet Character Generator**, which combines art from the
 **Liberated Pixel Cup (LPC)** community collection:
 
 - Generator: https://github.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator
@@ -18,19 +18,20 @@ Statement (as asked for by the LPC project):
 > http://opengameart.org/content/lpc-collection
 > License: Creative Commons Attribution-ShareAlike 3.0 (CC-BY-SA 3.0)
 > http://creativecommons.org/licenses/by-sa/3.0/
-> Detailed credits: see `assets/character-credits.txt`
 
-### IMPORTANT - one thing still to do
-The LPC art comes from many artists, and **each clothing/hair/body layer you picked has its own
-authors and license** (CC-BY-SA 3.0, CC-BY 3.0, GPL 3.0, OGA-BY, or CC0, depending on the layer).
-I (the AI that set this file up) cannot know which layers your character uses, so I have NOT
-written any artist names here.
+### Detailed per-layer credits
+Every layer of each character (body, hair, clothes, shoes, ...) has its own authors, licenses and source links,
+exported straight from the generator:
 
-To finish the credits:
-1. Open your character in the generator again (use "Import JSON" if you saved the .json).
-2. Use its **Credits / Export** option and download the credits as `.txt` or `.csv`.
-3. Paste that text into `assets/character-credits.txt` (replace the placeholder text in it).
-4. Keep this file and `assets/character-credits.txt` in your project, and keep the in-game
-   Credits screen (press **C**). The LPC project asks that credits be reasonably easy for players to find.
+- Player: [`assets/character-credits.txt`](assets/character-credits.txt)
+- NPC: [`assets/npc-credits.txt`](assets/npc-credits.txt)
 
-Note: CC-BY-SA is "share-alike", meaning edited versions of the art should be shared under the same license.
+Please keep both files with the project, and keep the in-game Credits screen (press **C**).
+
+### Licenses
+The layers are offered under OGA-BY 3.0, CC-BY-SA 3.0 and/or GPL 3.0 (see the files above for each layer).
+We distribute the character art under **CC-BY-SA 3.0**, with attribution to all the artists listed.
+Share-alike means edited versions of the art (including the recoloured student variants made in `js/sprites.js`)
+should be shared under the same license. The game code is under the MIT License (see `LICENSE`).
+
+*This is a summary, not legal advice. If the game is ever sold or published commercially, re-check each layer's license.*

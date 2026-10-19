@@ -1,8 +1,8 @@
-# University Adventures
+# Credit Hours
 
-A cozy top-down 2D pixel-art exploration game set on a lovingly rebuilt university rooftop, modelled on the real BRAC University (BracU) roof. No combat, no monsters: just wandering around, chatting with students, peeking over the rails at the city, and poking at everything you can find.
+An episodic top-down 2D pixel-art game series set on a lovingly rebuilt university rooftop. Each episode is its own self-contained story, released one at a time. **Episode 1: *Deadline*** (working title) is in development. The current build is the playable rooftop prototype: no combat, no monsters, just wandering around, chatting with students, peeking over the rails at the city, and poking at everything you can find.
 
-> **Status:** work in progress. Three connected zones, a handful of NPCs, one quest and a lot of small interactions. The lower floor is still under construction.
+> **Status:** work in progress (Episode 1: *Deadline* is in development). Three connected zones, a handful of NPCs, one quest and a lot of small interactions. The lower floor is still under construction.
 
 <p align="center">
   <img src="docs/screenshot-pool.png" alt="The Pool Zone: the Robotics Lab test tank, a lab member with a remote, and the restricted-area sign" width="49%">
@@ -76,7 +76,7 @@ A hint like `[E] Sit down` appears whenever there is something to interact with.
 The game uses ES modules, which browsers block when you open `index.html` directly from disk. Use a local server:
 
 ```bash
-cd University-Adventures
+cd credit-hours
 python -m http.server 8000      # on Windows you can also use: py -m http.server 8000
 ```
 
@@ -96,14 +96,15 @@ Other options: `npx serve`, or the *Live Server* extension in VS Code. After edi
 ## Project structure
 
 ```
-University-Adventures/
+credit-hours/
 ├── index.html
 ├── CREDITS.md
 ├── LICENSE
 ├── assets/
 │   ├── character-spritesheet.png   player sprites
 │   ├── npc-spritesheet.png         NPC sprites
-│   └── character-credits.txt       per-layer art credits
+│   ├── character-credits.txt       per-layer art credits (player)
+│   └── npc-credits.txt             per-layer art credits (NPC)
 ├── docs/                           README screenshots
 └── js/
     ├── main.js        game loop, interaction wiring
@@ -178,19 +179,21 @@ The key is the exit tile, `to` is the zone to fade into, and `spawn` is where th
 - [ ] More NPCs and quests tied to the Robotics Lab
 - [ ] Sound effects and music
 - [ ] Save and load progress
-- [ ] Title screen and menu
-- [ ] Fill in `assets/character-credits.txt` with the generator's exported credits
+- [ ] Title screen, menu and episode select
+- [ ] Episode 1: *Deadline*
+- [x] Fill in the character credits from the generator (`assets/character-credits.txt`, `assets/npc-credits.txt`)
 
 ## Credits
 
-Character sprites were made with the **Universal LPC Spritesheet Character Generator**, using art from the Liberated Pixel Cup project on OpenGameArt.org. These assets are licensed under CC-BY-SA / GPL and require attribution. See [`CREDITS.md`](CREDITS.md) and [`assets/character-credits.txt`](assets/character-credits.txt) for the full list of authors and licenses.
+Character sprites were made with the **Universal LPC Spritesheet Character Generator**, using art from the Liberated Pixel Cup project on OpenGameArt.org. These assets are licensed under CC-BY-SA / GPL and require attribution. See [`CREDITS.md`](CREDITS.md), [`assets/character-credits.txt`](assets/character-credits.txt) (player) and [`assets/npc-credits.txt`](assets/npc-credits.txt) (NPC) for the full list of authors and licenses.
 
-The rooftop is based on the real BracU rooftop (a public vlog walkthrough was used only as a visual guide).
+The rooftop is inspired by a real university rooftop.
 
 ## License
 
-MIT License
+- **Code:** MIT License
+- **Character art:** CC-BY-SA 3.0 (with GPL 3.0 / OGA-BY 3.0 layers), see [`CREDITS.md`](CREDITS.md)
 
 ## Authors
 
-Built by Md. Fahim Hassan & Shahriar Islam Tawsif, CSE students of BracU, as a passion project.
+Built by Md. Fahim Hassan & Shahriar Islam Tawsif, CSE students, as a passion project.

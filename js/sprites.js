@@ -41,6 +41,15 @@ const sheets = {
   npc:    load('assets/npc-spritesheet.png'),
 };
 
+// Soft ground shadow under a character's feet. The new generator sheets have NO baked-in shadow, so we draw one here (two stacked ellipses =
+// a soft edge with a darker core). (cx, footY) = feet position, scale = sprite scale. TWEAK ME: the radii (px at scale 1) and the alphas.
+function drawShadow(ctx, cx, footY, scale) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.24)'; ctx.beginPath(); ctx.ellipse(cx, footY + 0.5 * scale, 15 * scale, 6.2 * scale, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.30)'; ctx.beginPath(); ctx.ellipse(cx, footY + 0.5 * scale, 10.5 * scale, 4.2 * scale, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
 // Draws one character. `who` needs: cx (feet x), facing, moving, animTime and footY (or y + h).
 // `which` picks the sheet: 'player' or 'npc'.
 // Returns true if it drew the sprite, false if the image isn't loaded yet (caller draws a fallback box).
@@ -56,6 +65,7 @@ export function drawCharacter(ctx, who, which = 'player') {
   const size = FRAME * SCALE;                       // drawn size on screen
   const dx = Math.round(who.cx - FEET_X * SCALE);   // feet stay at the bottom-center
   const dy = Math.round(footY - FEET_Y * SCALE);
+  if (!climb && !who.swimming) drawShadow(ctx, who.cx, footY, SCALE);   // no shadow on the pool ladder wall or in the water
   if (climb && who.climbFront) {                    // climbing while facing us (south pool ladder)
     frontClimbCanvas ??= buildFrontClimb(sheet);
     ctx.drawImage(frontClimbCanvas, frame * FRAME, 0, FRAME, FRAME, dx, dy, size, size);
@@ -170,6 +180,7 @@ export function drawStudent(ctx, variant, facing, moving, animTime, cx, footY, s
   if (!c) return false;
   const frame = moving ? 1 + (Math.floor(animTime * fps) % 8) : 0;
   const size = FRAME * scale;
+  drawShadow(ctx, cx, footY, scale);
   ctx.drawImage(c, frame * FRAME, (STU_ROW[facing] ?? 2) * FRAME, FRAME, FRAME,
     Math.round(cx - FEET_X * scale), Math.round(footY - FEET_Y * scale), size, size);
   return true;
@@ -181,6 +192,7 @@ export function drawStudentPose(ctx, variant, facing, cx, footY, scale, frame = 
   const c = built[variant];
   if (!c) return false;
   const size = FRAME * scale;
+  drawShadow(ctx, cx, footY, scale);
   ctx.drawImage(c, frame * FRAME, (4 + (STU_ROW[facing] ?? 2)) * FRAME, FRAME, FRAME,
     Math.round(cx - FEET_X * scale), Math.round(footY - FEET_Y * scale), size, size);
   return true;

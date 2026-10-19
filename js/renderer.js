@@ -1776,10 +1776,10 @@ function drawCredits() {
   ctx.font = 'bold 20px monospace'; ctx.fillStyle = '#ffd54f'; ctx.fillText('CREDITS', 30, 44);
   ctx.font = '14px monospace'; ctx.fillStyle = '#fff';
   let y = 78;
-  y = wrap('Game: Md. Fahim Hassan & Shahriar Islam Tawsif - BRAC University, Dept. of CSE', 30, y, VW - 60, 20) + 8;
-  y = wrap('Character sprite: made with the Universal LPC Spritesheet Character Generator.', 30, y, VW - 60, 20) + 8;
+  y = wrap('Credit Hours - made by Md. Fahim Hassan & Shahriar Islam Tawsif, CSE students. A passion project.', 30, y, VW - 60, 20) + 8;
+  y = wrap('Player and NPC sprites: made with the Universal LPC Spritesheet Character Generator.', 30, y, VW - 60, 20) + 8;
   y = wrap('Sprites contributed as part of the Liberated Pixel Cup project from OpenGameArt.org: http://opengameart.org/content/lpc-collection', 30, y, VW - 60, 20) + 8;
   y = wrap('License: Creative Commons Attribution-ShareAlike 3.0 (CC-BY-SA 3.0) http://creativecommons.org/licenses/by-sa/3.0/', 30, y, VW - 60, 20) + 8;
-  y = wrap('Detailed per-artist credits: see CREDITS.md and assets/character-credits.txt', 30, y, VW - 60, 20);
+  y = wrap('Detailed per-artist credits: see CREDITS.md, assets/character-credits.txt (player) and assets/npc-credits.txt (NPC)', 30, y, VW - 60, 20);
   ctx.fillStyle = '#aaa'; ctx.fillText('[C] close', 30, VH - 24);
 }
